@@ -7,19 +7,22 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 
+#include "functions.h"
+
 int main (int argc, char **argv) {
-	
+
 	// flagy
 	bool r_on = false; // recurse
 	bool x_on = false; // reverse
 	bool six_on = false; // ipv6
 	bool s_on = false; // server musi byt zadany
- 
+    bool p_on = false; // port
+
 	// hodnoty
 	char *s_val = NULL; // server
 	char *p_val = "53"; // port
 	char *ip_val = NULL; // dotazovana adresa
-	  
+
 	// countery getopt
 	int index;
 	int c;
@@ -45,6 +48,7 @@ int main (int argc, char **argv) {
 					s_val = optarg;
 					break;
 				case 'p':
+                    p_on = true;
 					p_val = optarg;
 					break;
 				case '?':
@@ -55,15 +59,13 @@ int main (int argc, char **argv) {
 					else // neznama moznost
 						fprintf (stderr,"Neznamy argument `\\x%x'.\n",optopt);
 					return 1;
-					
+
 				default:
 					abort(); // ukonci parsovani
-			}	
-		  
+			}
 		}
-		
 	}
-	
+
 	if(!s_on) { // kdyz chybi server
 		fprintf (stderr,"Chybi server argument.\n");
 		return 1;
@@ -73,43 +75,54 @@ int main (int argc, char **argv) {
 	for (index = optind; index < argc; index++) {// projdi argumenty, ktery nebyly explicitne zadane
 		if(b) {
 			fprintf (stderr,"Nejaky argument prebyva.\n");
-			return 1;			
+			return 1;
 		}
 		b = true;
 		ip_val = argv[index]; // uloz query ip adresu
 	}
-	
+
 	if(!b) { // chybi ip adresa query
 		fprintf (stderr,"Chybi query ip adresa.\n");
 		return 1;
 	}
-		
-	// overeni serveru, muze byt host / ip
-	; // over na host a pak na ip jestli je alespon jedno
-	// pokud je host rpeved na ip: https://www.binarytides.com/hostname-to-ip-address-c-sockets-linux/
-	
-	
-	if(x_on) // zapnuty reverzni dotaz
-		; // musi byt pouze ip
-	else
-		; // musi byt pouze host
-		
-	// overeni cisla portu jestli je int od 0-65535 vcetne
-		;
+
+	if(!validate_ip(s_val)) { // zadany server neni platna ip adresa
+		if(!strlen(validate_hostname(s_val))) {
+			fprintf (stderr,"Nepodarilo se pripojit k zadne IP adrese zadaneho dns serveru.\n");
+			return 1;		
+		}
+	}
+
+	if(x_on) {// zapnuty reverzni dotaz
+		if(!validate_ip(ip_val)) { // pri reverznim dotazu muze byt dotazovana pouze ip adresa
+            fprintf(stderr, "Dotazovana adresa neni adresou.\n");
+            return 1;
+		}
+	}
+	else { // obycejny dotaz, muze byt dotazovan pouze validni retezec
+		validate_string(ip_val);
+	}
+
+    if(p_on) { // pokud byl zadavan port
+        if(!validate_port(p_val)) { // overeni hodnoty
+            fprintf(stderr, "Port neni spravne zadany.\n");
+            return 1;
+        }
+    }
+
+	// ******** KONEC OVEROVANI *********
 
 	// konec overeni, podle techto argumentu zacni skladat hlavicku a telo dotazu kterej posles ven
 	printf("r: %d x: %d 6: %d server: %s port: %s ip: %s\n", r_on, x_on, six_on, s_val, p_val, ip_val);
 
+	// IF REVERZNI:
+	// PREVED POZADOVANE DNS JMENO NA 3WWW ATD
 	
+	
+
 	return 0;
-	
+
 }
-
-
-// VALID IP ADDR
-//     struct sockaddr_in sa;
-//    int result = inet_pton(AF_INET, ipAddress, &(sa.sin_addr));
-//    return result != 0;
 
 typedef struct dns {
 	unsigned short id; // id k rozpoznani request-answer
