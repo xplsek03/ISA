@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <string.h>
 
 #include "functions.h"
 
@@ -19,9 +20,12 @@ int main (int argc, char **argv) {
     bool p_on = false; // port
 
 	// hodnoty
-	char *s_val = NULL; // server
-	char *p_val = "53"; // port
+	int p_val; // cilova hodnota portu jako int
+	char s_val[255]; // server
+	char *p_val_str = "53"; // port jako string
 	char *ip_val = NULL; // dotazovana adresa
+
+	bool free_replace = false; // abychom nevolali free na neco co jsme nealokovali
 
 	// countery getopt
 	int index;
@@ -45,11 +49,11 @@ int main (int argc, char **argv) {
 					break;
 				case 's':
 					s_on = true;
-					s_val = optarg;
+					strcpy(s_val, optarg);
 					break;
 				case 'p':
                     p_on = true;
-					p_val = optarg;
+					p_val_str = optarg;
 					break;
 				case '?':
 					if (optopt == 'p' || optopt == 's') // chybejici hodnoty
@@ -86,13 +90,6 @@ int main (int argc, char **argv) {
 		return 1;
 	}
 
-	if(!validate_ip(s_val)) { // zadany server neni platna ip adresa
-		if(!strlen(validate_hostname(s_val))) {
-			fprintf (stderr,"Nepodarilo se pripojit k zadne IP adrese zadaneho dns serveru.\n");
-			return 1;		
-		}
-	}
-
 	if(x_on) {// zapnuty reverzni dotaz
 		if(!validate_ip(ip_val)) { // pri reverznim dotazu muze byt dotazovana pouze ip adresa
             fprintf(stderr, "Dotazovana adresa neni adresou.\n");
@@ -103,22 +100,36 @@ int main (int argc, char **argv) {
 		validate_string(ip_val);
 	}
 
-    if(p_on) { // pokud byl zadavan port
-        if(!validate_port(p_val)) { // overeni hodnoty
-            fprintf(stderr, "Port neni spravne zadany.\n");
-            return 1;
-        }
+	p_val = validate_port(p_val_str); // over hodnotu portu
+    if(p_val == -1) { // spatne zadany port
+        fprintf(stderr, "Port neni spravne zadany.\n");
+        return 1;
     }
+
+	if(!validate_ip(s_val)) { // zadany server neni platna ip adresa
+	
+		free_replace = true; // v pripade ze budeme muset v budoucnu zavolat free() na s_val
+		char *replace = validate_hostname(s_val); // vrat funkcni ip adresu z domenoveho jmena
+		strcpy(s_val, replace); // nahrad puvodni hostname serveru jeho ip adresou
+	
+		if(!strlen(replace)) {
+			fprintf (stderr,"Nepodarilo se pripojit k zadne IP adrese zadaneho dns serveru.\n");
+			free(replace);
+			return 1;		
+		}
+	}
 
 	// ******** KONEC OVEROVANI *********
 
-	// konec overeni, podle techto argumentu zacni skladat hlavicku a telo dotazu kterej posles ven
-	printf("r: %d x: %d 6: %d server: %s port: %s ip: %s\n", r_on, x_on, six_on, s_val, p_val, ip_val);
+	char *url = "www.google.com";
+	char neu[257]; // nula na konci
+	dns_format(url, neu);
+	printf("FORMED: %s\n",neu);
 
-	// IF REVERZNI:
-	// PREVED POZADOVANE DNS JMENO NA 3WWW ATD
+	// konec overeni, podle techto argumentu zacni skladat hlavicku a telo dotazu kterej posles ven
+	printf("r: %d x: %d 6: %d server: %s port: %i ip: %s\n", r_on, x_on, six_on, s_val, p_val, ip_val);
 	
-	
+	// PRI CHYBE ZKOUMEJ JESTLI JE free_replace == TRUE. Pokud jo tak: free(replace)
 
 	return 0;
 

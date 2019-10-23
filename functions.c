@@ -22,21 +22,22 @@ bool validate_ip(char *ip) {
 }
 
 // over zda se jedna o validni port
-bool validate_port(char *port) {
+int validate_port(char *port) {
     char *ptr;
     long ret;
     ret = strtol(port, &ptr, 10);
     if(strlen(ptr)) // vlozena i nejaka pismenka
-        return false;
+        return -1;
     if(ret < 0 || ret > 65535) // neodpovida range
-        return false;
-    return true;
+        return -1;
+    return (int)ret;
 }
 
 // over domenove jmeno
 // funkce inspirovana z: http://man7.org/linux/man-pages/man3/getaddrinfo.3.html?fbclid=IwAR1nM16wJIbbV9qvZ6yES__aYIfzpN63QYpDA53Ce6t425TGtsAxvzpeu60
 char *validate_hostname(char *hostname) {
 
+	int sfd; // socket return
     struct addrinfo hints, *infoptr, *rp;
     memset(&hints, 0, sizeof(hints)); // vynulovani hints
 
@@ -51,10 +52,10 @@ char *validate_hostname(char *hostname) {
         exit(1); // protoze jsme v main nic nealokovali, muzeme pouzit bez obav exit()
     }
 
-    char ip[256]; // ulozeni cilove adresy
-    memset(ip, '\0', sizeof(hints));
-
-    bool found = false;
+	char ip[256];
+	
+	char *new_ip = malloc(sizeof(char) * 256); // alokuj cilovou ip adresu
+    memset(new_ip, '\0', 256);
 
     for (rp = infoptr; rp != NULL; rp = rp->ai_next) {
 
@@ -64,20 +65,20 @@ char *validate_hostname(char *hostname) {
             continue;
         if (connect(sfd, rp->ai_addr, rp->ai_addrlen) != -1) { // podarilo se navazat spojeni s jednou z adres
             getnameinfo(rp->ai_addr, rp->ai_addrlen, ip, sizeof(ip), NULL, 0, NI_NUMERICHOST); // uloz adresu do bufferu
-            found = true;
             break;
         }
-
         close(sfd);
     }
 
     if (rp == NULL) { // nebyly nalezeny zadne adresy k domenovemu jmenu
         fprintf(stderr, "Nelze navazat spojeni s hostname.\n");
+        free(new_ip);
         exit(1);
     }
 
 	freeaddrinfo(infoptr); // uvolni systemove alokovany buffer
-    return host; // vrat nalezenou adresu nebo retezec delky 0
+    strcpy(new_ip,ip);
+    return new_ip; // vrat nalezenou adresu nebo retezec delky 0
 }
 
 // over jestli je poptavana adresa validni retezec
@@ -95,7 +96,7 @@ void validate_string(char *url) {
 	
 		label_c++; // pridat znak do labelu
 	
-		if(!isalnum(url[i]) && (url[i] != '-' || url[i] != '.'))
+		if(!isalnum(url[i]) && url[i] != '-' && url[i] != '.')
 			goto fail; // vyrad adresy ktere obsahuji spatne znaky
 		
 		if(url[i] == '.') {
@@ -118,4 +119,32 @@ void validate_string(char *url) {
 	    fprintf(stderr, "Pozadovana adresa neni validni.\n");
         exit(1); // protoze jsme v main nic nealokovali, muzeme pouzit bez obav exit()	
 
+}
+
+// konverze url na dns format
+void dns_format(char *url, char *neu) {
+
+	char number[3]; // cislo preveden na string
+	int new_pos = 0; // pozice zapisu do dns formatovaneho retezce
+	int buffer_pos = 0; // pozice v bufferu
+	char buffer[64]; // buffer pro ukladani mezivysledku
+	memset(buffer, '\0', 64);
+	memset(number, '\0', 3);
+	
+	for(int i = 0; i < (int)strlen(url)+1; i++) {
+	
+		if(url[i] == '.' || url[i] == '\0') {
+			sprintf(number, "%d", buffer_pos);
+			strcat(neu, number); // uloz cislici do New
+			strcat(neu,buffer); // uloz obsah bufferu do New
+			buffer_pos = 0;
+			memset(buffer, '\0', 64);
+			memset(number, '\0', 3);				
+		}
+		else {
+			buffer[buffer_pos] = url[i]; // ulozit do bufferu a jet dal
+			buffer_pos++; // zvys hodnotu pozice v bufferu
+		}
+	}
+	strcat(neu,"0");
 }
