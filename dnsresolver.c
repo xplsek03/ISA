@@ -185,11 +185,13 @@ int main (int argc, char **argv) {
     	int s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP); // socket pro odeslani
 	
 		if(sendto(s, dgram, size, 0, (struct sockaddr*)&dest, sizeof(dest)) < 0) { // odeslani datagramu
-        	fprintf(stderr,"Chyba pri odesilani dat.\n");
+        	perror("Chyba pri odesilani dat.\n"); // vystup s kodem na stderr
         	goto error;
     	}
     	
     	// ******** ZPRACOVANI ODPOVEDI *********
+    
+    	
     
     }
     
@@ -198,7 +200,7 @@ int main (int argc, char **argv) {
 	return 0;	
 	
 	error: // od radku 
-		if(free_replace)
+		if(free_replace) // pokud jsme alokovali char *replace, uvolni ho
 			free(replace);
 		return 1;
 	
