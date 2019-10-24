@@ -25,12 +25,13 @@ int main (int argc, char **argv) {
 	char *p_val_str = "53"; // port jako string
 	char *ip_val = NULL; // dotazovana adresa
 
-	bool free_replace = false; // abychom nevolali free na neco co jsme nealokovali
-
 	// countery getopt
 	int index;
 	int c;
 
+	char *replace; // retezec pro pripad prevodu serveru na ip
+	bool free_replace = false; // abychom nevolali free na neco co jsme nealokovali
+	
 	opterr = 0;
 
 	if(argc >= 4 && argc <= 9) { // argumentu je spravny pocet
@@ -107,64 +108,98 @@ int main (int argc, char **argv) {
     }
 
 	if(!validate_ip(s_val)) { // zadany server neni platna ip adresa
-	
+
 		free_replace = true; // v pripade ze budeme muset v budoucnu zavolat free() na s_val
-		char *replace = validate_hostname(s_val); // vrat funkcni ip adresu z domenoveho jmena
+		replace = validate_hostname(s_val); // vrat funkcni ip adresu z domenoveho jmena
 		strcpy(s_val, replace); // nahrad puvodni hostname serveru jeho ip adresou
-	
+
 		if(!strlen(replace)) {
 			fprintf (stderr,"Nepodarilo se pripojit k zadne IP adrese zadaneho dns serveru.\n");
-			free(replace);
-			return 1;		
+			goto error;
 		}
 	}
-
-	// ******** KONEC OVEROVANI *********
-
-	char *url = "www.google.com";
-	char neu[257]; // nula na konci
-	dns_format(url, neu);
-	printf("FORMED: %s\n",neu);
-
-	// konec overeni, podle techto argumentu zacni skladat hlavicku a telo dotazu kterej posles ven
-	printf("r: %d x: %d 6: %d server: %s port: %i ip: %s\n", r_on, x_on, six_on, s_val, p_val, ip_val);
 	
-	// PRI CHYBE ZKOUMEJ JESTLI JE free_replace == TRUE. Pokud jo tak: free(replace)
+	// ******** REVERZNI DOTAZ *************
+	
+	if(x_on) {
+		reverse_dns(ip_val);
+	}
+	
+	// ******** OBYCEJNY DOTAZ *************
+	
+	else {
 
-	return 0;
+		// ******** PLNENI DATAGRAMU *********
+	
+		unsigned char dgram[65536]; // datagram
+	
+		// struktury datagramu
+		HEADER *header = NULL; // hlavicka
+		Q *q = NULL; // query
+		int size = 0; // aby nebylo potreba prepocitavat pozici v datagramu
+	
+		header = (HEADER *)&dgram;
+		header->id = (unsigned short)htons(getpid());
+		header->qr = 0;
+		header->opcode = 0;
+		header->aa = 0;
+		header->tc = 0;
+		if(r_on)
+			header->rd = 1; // pokud je zapnuta rekurze
+		else
+			header->rd = 0;
+		header->ra = 0;
+		header->z = 0;
+		header->ad = 0;
+		header->cd = 0;
+		header->rcode = 0;
+		header->qcount = htons(1); // jediny pozadavek 
+		header->acount = 0;
+		header->aucount = 0;
+		header->addcount = 0;
+		
+		size = sizeof(HEADER);
+		
+		char *q_name = (unsigned char *)&dgram[size];
+		
+		dns_format(q_name, ip_val); // preved adresu do dns formatu
+		
+		size += strlen((const char *)q_name) + 1;
+	
+		q = (Q *)&dgram[size];
+		if(six_on)
+			q->type = htons(2); // AAAA
+		else
+			q->type = htons(1); // A
+		q->cl = htons(1); // IN
+	
+		size += sizeof(Q);
 
+		// ******** ODESLANI DATAGRAMU *********
+	
+    	struct sockaddr_in dest; // serversocket
+    	dest.sin_family = AF_INET;
+    	dest.sin_addr.s_addr = inet_addr(s_val); // adresa
+    	dest.sin_port = htons(p_val); // port
+ 	
+    	int s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP); // socket pro odeslani
+	
+		if(sendto(s, dgram, size, 0, (struct sockaddr*)&dest, sizeof(dest)) < 0) { // odeslani datagramu
+        	fprintf(stderr,"Chyba pri odesilani dat.\n");
+        	goto error;
+    	}
+    	
+    	// ******** ZPRACOVANI ODPOVEDI *********
+    
+    }
+    
+	// ******* KONEC *******
+	
+	return 0;	
+	
+	error: // od radku 
+		if(free_replace)
+			free(replace);
+		return 1;
+	
 }
-
-typedef struct dns {
-	unsigned short id; // id k rozpoznani request-answer
-	unsigned char qr : 1; // 0=req, 1=response
-	unsigned char opcode : 4; // req: 0 = query, 1 = inverse query, jinak asi nic
-	unsigned char aa : 1; // answ: jeslti odpovida autoritativni server
-	unsigned char tc : 1; // answ: truncated, budeme se k tomu chovat jako ze to nepodporujeme :)
-	unsigned char rd : 1; // req: chceme rekurzi
-	unsigned char ra : 1; // answ: rekurze dostupna
-	unsigned char z : 1;
-	unsigned char ad : 1;
-	unsigned char cd : 1;
-	unsigned char rcode : 4; // answ: navratovej kod
-	// 16b polozky, jen pocet
-	unsigned short qestion_count; // c: query structs
-	unsigned short answer_count; // c: rr struct
-	unsigned short auth_rr_count; // c: rr struct
-	unsigned short add_rr_count; // c: rr struct
-} dns_header;
-
-typedef struct q {
-	unsigned char *name; // domena: *q = malloc(sizeof(struct q)); name = malloc(sizeof(char)); p->name = malloc(strlen(name)+1); strcpy(p->name, name);
-	unsigned short type; // zajima nas 1=A, 5=CNAME
-	unsigned short cl; // zajima nas 1=IN(ternet)
-} dns_question;
-
-typedef struct rr {
-	unsigned char *name; // rr name
-	unsigned short type; // zajima nas 1=A, 5=CNAME
-	unsigned short cl; // zajima nas 1=IN(ternet)
-	unsigned int ttl; // time to live
-	unsigned short rdlength; // delka rdata v bytech
-	// + RDATA: 32b v4 nebo v6 16*oktet
-} dns_rr;
