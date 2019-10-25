@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <string.h>
+#include <sys/time.h>
 
 #include "functions.h"
 
@@ -29,6 +30,7 @@ int main (int argc, char **argv) {
 	int index;
 	int c;
 
+	// ruzne dalsi
 	char *replace; // retezec pro pripad prevodu serveru na ip
 	bool free_replace = false; // abychom nevolali free na neco co jsme nealokovali
 	
@@ -140,19 +142,11 @@ int main (int argc, char **argv) {
 	
 		header = (HEADER *)&dgram;
 		header->id = (unsigned short)htons(getpid());
-		header->qr = 0;
-		header->opcode = 0;
-		header->aa = 0;
-		header->tc = 0;
-		if(r_on)
-			header->rd = 1; // pokud je zapnuta rekurze
-		else
-			header->rd = 0;
-		header->ra = 0;
-		header->z = 0;
-		header->ad = 0;
-		header->cd = 0;
-		header->rcode = 0;
+		header->guts = htons(0);
+		if(r_on) {
+			header->guts ^= 1UL << 0; // POZN: xxxxxxx1  <-(1) xxxxxxxx <-(2)
+		}
+
 		header->qcount = htons(1); // jediny pozadavek 
 		header->acount = 0;
 		header->aucount = 0;
@@ -177,12 +171,18 @@ int main (int argc, char **argv) {
 
 		// ******** ODESLANI DATAGRAMU *********
 	
-    	struct sockaddr_in dest; // serversocket
+    	struct sockaddr_in dest; // server socket
     	dest.sin_family = AF_INET;
     	dest.sin_addr.s_addr = inet_addr(s_val); // adresa
     	dest.sin_port = htons(p_val); // port
  	
-    	int s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP); // socket pro odeslani
+    	int s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+	
+		//struct timeval timeout;
+		//timeout.tv_sec = 5; // nastav timeout na 5s, kdyby neprisla odpoved 
+		//if (setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
+    	//	perror("Neprisla zadna odpoved.\n");
+		//}
 	
 		if(sendto(s, dgram, size, 0, (struct sockaddr*)&dest, sizeof(dest)) < 0) { // odeslani datagramu
         	perror("Chyba pri odesilani dat.\n"); // vystup s kodem na stderr
@@ -190,12 +190,73 @@ int main (int argc, char **argv) {
     	}
     	
     	// ******** ZPRACOVANI ODPOVEDI *********
+
+    	int incoming = sizeof(dest);
+    	if(recvfrom(s,dgram, 65536 , 0, (struct sockaddr*)&dest, (socklen_t*)&incoming) < 0) {
+        	perror("Chyba pri prijimani dat.\n");
+    	}
     
-    	
-    
-    }
-    
+		header = (HEADER *)&dgram;
+
+		if(header->id == htons(getpid()) && ((htons(header->guts) >> 15) & 1U)) { // id dotazu odpovida id odpovedi a je to odpoved
+	
+			if(r_on && !((htons(header->guts) >> 15) & 1U)) { // pokud chceme rekurzi a neni dostupna, vyhod chybu
+				fprintf(stderr,"Rekurze neni na tomto serveru dostupna.\n");
+				goto error;
+			}
+			
+			if(((htons(header->guts) >> 0) & 1U) || ((htons(header->guts) >> 1) & 1U) 
+			|| ((htons(header->guts) >> 2) & 1U) || ((htons(header->guts) >> 3) & 1U)) { // pokud se vyskytla nejaka chyba
+			
+				if(((htons(header->guts) >> 0) & 1U) && !((htons(header->guts) >> 1) & 1U) 
+				&& !((htons(header->guts) >> 2) & 1U) && !((htons(header->guts) >> 3) & 1U)) {
+					fprintf(stderr,"Server nedokaze vyhodnotit pozadavek.\n");
+					goto error;
+				}
+				else if(!((htons(header->guts) >> 0) & 1U) && ((htons(header->guts) >> 1) & 1U) 
+				&& !((htons(header->guts) >> 2) & 1U) && !((htons(header->guts) >> 3) & 1U)) {
+					fprintf(stderr,"Server se nemuze pripojit k nameserveru.\n");
+					goto error;
+				}
+
+				else if(((htons(header->guts) >> 0) & 1U) && ((htons(header->guts) >> 1) & 1U) 
+				&& !((htons(header->guts) >> 2) & 1U) && !((htons(header->guts) >> 3) & 1U)) {
+					fprintf(stderr,"Domenove jmeno neexistuje.\n");
+					goto error;
+				}				
+
+				else if(!((htons(header->guts) >> 0) & 1U) && !((htons(header->guts) >> 1) & 1U) 
+				&& ((htons(header->guts) >> 2) & 1U) && !((htons(header->guts) >> 3) & 1U)) {
+					fprintf(stderr,"Server tento typ pozadavku neimplementuje.\n");
+					goto error;
+				}	
+
+				else if(((htons(header->guts) >> 0) & 1U) && !((htons(header->guts) >> 1) & 1U) 
+				&& ((htons(header->guts) >> 2) & 1U) && !((htons(header->guts) >> 3) & 1U)) {
+					fprintf(stderr,"Server pozadavek zamitnul.\n");
+					goto error;
+				}	
+				else {
+					fprintf(stderr,"Neznama chyba.\n");
+					goto error;
+				}
+			}
+	
+			printf("Autoritativni: %s\n", ((htons(header->guts) >> 10) & 1U) ? "ANO" : "NE"); // AA bit set
+			printf("Zkraceno: %s\n", ((htons(header->guts) >> 9) & 1U) ? "ANO" : "NE"); // TC bit set
+			printf("Rekurzivni: %s\n", (((htons(header->guts) >> 7) & 1U) && ((htons(header->guts) >> 8) & 1U)) ? "ANO" : "NE");
+			// rekurzivni pouze v pripade, ze byla pozadovana rekurze a zaroven je nastavena rekurze dostupna na serveru
+ 		
+    		printf("\n %d Questions.",ntohs(header->qcount));
+    		printf("\n %d Answers.",ntohs(header->acount));
+    		printf("\n %d Authoritative Servers.",ntohs(header->aucount));
+    		printf("\n %d Additional records.\n\n",ntohs(header->addcount));
+     	
+     	}
+     
 	// ******* KONEC *******
+	
+	}
 	
 	return 0;	
 	

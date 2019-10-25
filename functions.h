@@ -9,17 +9,17 @@ void reverse_dns(char *hostname); // -x volba, tisk
 
 typedef struct header { // dns hlavicka
 	unsigned short id; // id k rozpoznani request-answer
-	unsigned char qr : 1; // 0=req, 1=response
-	unsigned char opcode : 4; // req: 0 = query, 1 = inverse query, jinak asi nic
-	unsigned char aa : 1; // answ: jeslti odpovida autoritativni server
-	unsigned char tc : 1; // answ: truncated, budeme se k tomu chovat jako ze to nepodporujeme :)
-	unsigned char rd : 1; // req: chceme rekurzi
-	unsigned char ra : 1; // answ: rekurze dostupna
-	unsigned char z : 1;
-	unsigned char ad : 1;
-	unsigned char cd : 1;
-	unsigned char rcode : 4; // answ: navratovej kod
-	// 16b polozky, jen pocet
+	//unsigned char qr : 1; // 0=req, 1=response
+	//unsigned char opcode : 4; // req: 0 = query, 1 = inverse query, jinak asi nic
+	//unsigned char aa : 1; // answ: jeslti odpovida autoritativni server
+	//unsigned char tc : 1; // answ: truncated, budeme se k tomu chovat jako ze to nepodporujeme :)
+	//unsigned char rd : 1; // req: chceme rekurzi
+	//unsigned char ra : 1; // answ: rekurze dostupna
+	//unsigned char z : 1;
+	//unsigned char ad : 1;
+	//unsigned char cd : 1;
+	//unsigned char rcode : 4; // answ: navratovej kod
+	unsigned short guts; // qr/opcode/aa/tc/rd/ra/z/rcode
 	unsigned short qcount; // c: query structs
 	unsigned short acount; // c: rr struct
 	unsigned short aucount; // c: rr struct
