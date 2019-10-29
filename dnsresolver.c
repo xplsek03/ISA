@@ -18,7 +18,6 @@ int main (int argc, char **argv) {
 	bool x_on = false; // reverse
 	bool six_on = false; // ipv6
 	bool s_on = false; // server musi byt zadany
-    bool p_on = false; // port
 
 	// hodnoty
 	int p_val; // cilova hodnota portu jako int
@@ -55,7 +54,6 @@ int main (int argc, char **argv) {
 					strcpy(s_val, optarg);
 					break;
 				case 'p':
-                    p_on = true;
 					p_val_str = optarg;
 					break;
 				case '?':
@@ -138,6 +136,7 @@ int main (int argc, char **argv) {
 		// struktury datagramu
 		HEADER *header = NULL; // hlavicka
 		Q *q = NULL; // query
+		RR *rr = NULL; // zaznam
 		int size = 0; // aby nebylo potreba prepocitavat pozici v datagramu
 	
 		header = (HEADER *)&dgram;
@@ -154,15 +153,15 @@ int main (int argc, char **argv) {
 		
 		size = sizeof(HEADER);
 		
-		char *q_name = (unsigned char *)&dgram[size];
+		unsigned char *position = (unsigned char *)&dgram[size];
 		
-		dns_format(q_name, ip_val); // preved adresu do dns formatu
+		dns_format(position, ip_val); // preved adresu do dns formatu
 		
-		size += strlen((const char *)q_name) + 1;
+		size += strlen((const char *)position) + 1;
 	
 		q = (Q *)&dgram[size];
 		if(six_on)
-			q->type = htons(2); // AAAA
+			q->type = htons(28); // AAAA
 		else
 			q->type = htons(1); // A
 		q->cl = htons(1); // IN
@@ -242,16 +241,226 @@ int main (int argc, char **argv) {
 				}
 			}
 	
-			printf("Autoritativni: %s\n", ((htons(header->guts) >> 10) & 1U) ? "ANO" : "NE"); // AA bit set
-			printf("Zkraceno: %s\n", ((htons(header->guts) >> 9) & 1U) ? "ANO" : "NE"); // TC bit set
-			printf("Rekurzivni: %s\n", (((htons(header->guts) >> 7) & 1U) && ((htons(header->guts) >> 8) & 1U)) ? "ANO" : "NE");
+			printf("AUTORITA\t%s\n", ((htons(header->guts) >> 10) & 1U) ? "ano" : "ne"); // AA bit set
+			printf("ZKRACENO\t%s\n", ((htons(header->guts) >> 9) & 1U) ? "ano" : "ne"); // TC bit set
+			printf("REKURZE \t%s\n", (((htons(header->guts) >> 7) & 1U) && ((htons(header->guts) >> 8) & 1U)) ? "ano" : "ne");
 			// rekurzivni pouze v pripade, ze byla pozadovana rekurze a zaroven je nastavena rekurze dostupna na serveru
- 		
-    		printf("\n %d Questions.",ntohs(header->qcount));
-    		printf("\n %d Answers.",ntohs(header->acount));
-    		printf("\n %d Authoritative Servers.",ntohs(header->aucount));
-    		printf("\n %d Additional records.\n\n",ntohs(header->addcount));
-     	
+		
+			printf("\n");
+			
+			if(ntohs(header->qcount) == 1) { // ptali jsme se na jedinou otazku
+				
+				size = sizeof(HEADER); // parsovani zacina za hlavickou
+				position = (unsigned char *)&dgram[size]; // ukazatel na zacatek question retezce
+			
+				unsigned char content[256]; // buffer pro vysledek parsovani
+				memset(content,'\0',256);
+				
+				int pos = 0; // zarazka, kde skoncilo parsovani	
+								
+				parser(content, position, dgram, &pos); // naparsuj question name
+				
+				size += pos; // dostan se za question name
+				
+				// naparsovani quesiton class a question type
+				q = (Q *)&dgram[size];
+				
+				// promenne k parsovani odpovedi
+				char tp[6];
+				memset(tp,'\0',6);
+				char cl[3];
+				memset(cl,'\0',3);
+				
+				if(ntohs(q->cl) == 1) {
+					strcpy(cl,"IN");
+				}
+				else if(ntohs(q->cl) == 3) {
+					strcpy(cl,"CH");
+				}
+				else if(ntohs(q->cl) == 4) {
+					strcpy(cl,"HS");
+				}
+				else {
+					fprintf(stderr,"Nepodporovana trida question.\n");
+					goto error;
+				}
+				
+				if(ntohs(q->type) == 1) {
+					strcpy(tp,"A");
+				}
+				else if(ntohs(q->type) == 12) {
+					strcpy(tp,"PTR");
+				}				
+				else if(ntohs(q->type) == 28) {
+					strcpy(tp,"AAAA");
+				}
+				else {
+					fprintf(stderr,"Nepodporovany typ question: %i.\n",ntohs(q->type));
+					goto error;
+				}							
+				
+				printf("QUESTION\t%s\t%s\t%s\n", content, cl, tp);
+				printf("\n");
+								
+				size += sizeof(Q); // preskoc question blok
+				
+				if(ntohs(header->acount)) { // existuji nejake odpovedi
+					for(int i = 0; i < ntohs(header->acount); i++) { // naparsuj postupne kazdou odpoved
+
+						memset(tp,'\0',6);
+						memset(cl,'\0',3);
+					
+						position = (unsigned char *)&dgram[size]; // nastav pozici za question blok	
+					
+						parser(content, position, dgram, &pos);
+						
+						size += pos; // pricti delku retezce Rname
+						
+						rr = (RR *)&dgram[size];
+
+						if(ntohs(rr->cl) == 1) {
+							strcpy(cl,"IN");
+						}
+						else if(ntohs(rr->cl) == 2) {
+							strcpy(cl,"CS");
+						}
+						else if(ntohs(rr->cl) == 3) {
+							strcpy(cl,"CH");
+						}
+						else if(ntohs(rr->cl) == 4) {
+							strcpy(cl,"HS");
+						}
+						else {
+							fprintf(stderr,"Nepodporovana trida odpovedi: %i.\n",ntohs(rr->cl));
+							goto error;
+						}
+
+						if(ntohs(rr->type) == 1) {
+							strcpy(tp,"A");
+						}
+						else if(ntohs(rr->type) == 2) {
+							strcpy(tp,"NS");
+						}
+						else if(ntohs(rr->type) == 3) {
+							strcpy(tp,"MD");
+						}
+						else if(ntohs(rr->type) == 4) {
+							strcpy(tp,"MF");
+						}						
+						else if(ntohs(rr->type) == 5) {
+							strcpy(tp,"CNAME");
+						}
+						else if(ntohs(rr->type) == 6) {
+							strcpy(tp,"SOA");
+						}
+						else if(ntohs(rr->type) == 7) {
+							strcpy(tp,"MB");
+						}
+						else if(ntohs(rr->type) == 8) {
+							strcpy(tp,"MG");
+						}	
+						else if(ntohs(rr->type) == 9) {
+							strcpy(tp,"MR");
+						}
+						else if(ntohs(rr->type) == 10) {
+							strcpy(tp,"NULL");
+						}
+						else if(ntohs(rr->type) == 11) {
+							strcpy(tp,"WKS");
+						}
+						else if(ntohs(rr->type) == 12) {
+							strcpy(tp,"PTR");
+						}	
+						else if(ntohs(rr->type) == 13) {
+							strcpy(tp,"HINFO");
+						}
+						else if(ntohs(rr->type) == 14) {
+							strcpy(tp,"MINFO");
+						}
+						else if(ntohs(rr->type) == 15) {
+							strcpy(tp,"MX");
+						}
+						else if(ntohs(rr->type) == 16) {
+							strcpy(tp,"TXT");
+						}	
+						else if(ntohs(rr->type) == 28) {
+							strcpy(tp,"AAAA");
+						}
+						else {
+							strcpy(tp,"???");
+						}
+						
+						printf("ANSWER %i\t%s\t%s\t%s\t%x\t", i, content, cl, tp, ntohs(rr->ttl));
+						
+						size += sizeof(RR);
+
+						position = (unsigned char *)&dgram[size]; // nastav pozici pred Rdata
+						
+						// VYPSANI ODPOVEDI
+						// kompletne podporovane: CNAME / A / AAAA / NS / PTR
+						// podpora vypisu hex dat: jakekoliv dalsi zaznamy
+						
+						if(ntohs(rr->type) == 5 || ntohs(rr->type) == 2) { // CNAME, NS
+							parser(content, position, dgram, &pos); // naparsuj textovy zaznam
+							printf("%s",content);
+						}
+						else if(ntohs(rr->type) == 1) { // A zaznam
+							if(ntohs(rr->rdlen) != 4) {
+								fprintf(stderr,"Chybna delka dat v odpovedi.\n");
+								goto error;
+							}
+							memset(content, '\0', 256); // vynuluj buffer
+							memcpy(content, position, 4); // zkopiruj ip adresu do bufferu							
+							for(int i = 0; i < 4; i++) {
+								printf("%i",content[i]);
+								if(i != 3)
+									printf(".");
+							}         											
+						}
+						else if(ntohs(rr->type) == 28) { // AAAA zaznam
+						
+							if(ntohs(rr->rdlen) != 16) {
+								fprintf(stderr,"Chybna delka dat v odpovedi.\n");
+								goto error;
+							}
+						
+							memset(content, '\0', 256); // vynuluj buffer
+							memcpy(content, position, 16); // zkopiruj ip adresu do bufferu							
+							
+							for(int i = 0; i < 16; i++) {
+								printf("%02x",content[i]);
+								if(i % 2 && i != 15)
+									printf(":");
+							}         											
+						}
+						
+						else if(ntohs(rr->type) == 12) { // PTR zaznam
+							; // naparsuj to
+						}
+						else {
+							; // naparsuj to a vypis to jako hex data
+						}
+											
+						printf("\n");
+						
+						size += ntohs(rr->rdlen); // preskoc Rdata a pokracuj dal
+						
+					}	
+					
+					// zadne dalsi odpovedi
+					
+					printf("\n");
+				}
+				
+				
+												
+				printf("%d Authoritative Servers.",ntohs(header->aucount));
+				printf("%d Additional records.\n\n",ntohs(header->addcount));				
+			}
+			else { // pokud neobsahuje question
+				fprintf(stderr,"Datagram neobsahuje dotaz nebo je vic nez 1.\n");
+				goto error;
+			}     	
      	}
      
 	// ******* KONEC *******

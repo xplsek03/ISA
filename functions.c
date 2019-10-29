@@ -15,7 +15,6 @@
 // over jestli se jedna o validni ip adresu
 bool validate_ip(char *ip) {
 	struct sockaddr_in sa;
-	int result; // vyzkousej obe moznosti, IPv4 i IPv6
 	if(inet_pton(AF_INET, ip, &(sa.sin_addr)) || inet_pton(AF_INET6, ip, &(sa.sin_addr)))
 		return true;
 	return false;
@@ -122,7 +121,7 @@ void validate_string(char *url) {
 }
 
 // funkce vypujcena od: https://gist.github.com/fffaraz/9d9170b57791c28ccda9255b48315168
-void dns_format(unsigned char* dns, unsigned char* host) {
+void dns_format(unsigned char* dns, char* host) {
     int lock = 0, i;
     strcat((char*)host,".");
      
@@ -178,4 +177,52 @@ void reverse_dns(char *hostname) {
     }
 
 	freeaddrinfo(infoptr); // uvolni systemove alokovany buffer
+}
+
+// lehka inspirace parsovani s pouzitim offsetu z: https://gist.github.com/fffaraz/9d9170b57791c28ccda9255b48315168
+void parser(unsigned char *result, unsigned char* pos, unsigned char* dgram, int* stuck) {
+ 
+ 	memset(result,'\0',256);
+    
+    int c = 0; // counter po jednom znaku
+    bool off = false; // jestli obsahuje offset
+    int offset; // pozice offsetu
+ 
+    *stuck = 1;
+ 
+    while(*pos != 0) { // dokud nenarazi na konec question name
+    
+        if(*pos >= 192) {
+            offset = (*pos) * 256 + *(pos+1) - 49152; // 1100000000000000
+            pos = dgram + offset - 1;
+            off = true; // preskocime pomoci ukazatele jinam
+        }
+     	else {
+            result[c] = *pos;
+			c++;
+ 		}
+ 		
+        pos += 1; // posun se v retezci
+ 
+        if(!off) { // nedoslo k vyskytu ukazatele
+            *stuck += 1; // posun se dal v datagramu
+    	}
+    }
+ 
+    if(off) { // doslo k vyskytu ukazatele
+        *stuck += 1; // posun se dal v datagramu
+	}
+
+ 	int i = 0; // formatovani adresy
+ 	 
+    while(i < strlen((const char *)result)) {
+        c = result[i]; // vezmi cislo na zacatku labelu
+        for(int j = 0; j < c; j++) {
+            result[i] = result[i+1]; // nacti do result spranvy pocet znaku labelu
+            i++;
+        }
+        result[i]='.'; // pridej tecku
+        i++; // prejdi na dalsi label
+    }
+    result[i-1]='\0'; // smaz posledni tecku
 }
