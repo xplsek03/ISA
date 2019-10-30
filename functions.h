@@ -5,7 +5,6 @@ int validate_port(char *port); // over port
 char *validate_hostname(char *hostname); // over server
 void validate_string(char *url); // over dom. jmeno
 void dns_format(unsigned char* dns,char* host); // adresa->dns format
-void reverse_dns(char *hostname); // -x volba, tisk
 void parser(unsigned char *result, unsigned char* pos, unsigned char* dgram, int* zarazka);
 
 typedef struct header { // dns hlavicka
@@ -32,3 +31,6 @@ typedef struct rr { // dns resource record
 	// + RDATA: 32b v4 nebo v6 16*oktet
 } RR;
 #pragma pack(pop)
+
+bool revert_ip(char *ip);
+int print_answers(int cnt, int *size, unsigned char *dgram, int *pos, unsigned char *position, unsigned char *content, char *cl, char *tp, char *typ);

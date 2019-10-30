@@ -11,13 +11,18 @@
 #include <sys/socket.h>
 #include <netdb.h>
 
+#ifndef FUNCTIONS_H
+#include "functions.h"
+#endif
 
 // over jestli se jedna o validni ip adresu
 bool validate_ip(char *ip) {
 	struct sockaddr_in sa;
-	if(inet_pton(AF_INET, ip, &(sa.sin_addr)) || inet_pton(AF_INET6, ip, &(sa.sin_addr)))
+	if(inet_pton(AF_INET, ip, &(sa.sin_addr)) || inet_pton(AF_INET6, ip, &(sa.sin_addr))) {
 		return true;
+	}
 	return false;
+	
 }
 
 // over zda se jedna o validni port
@@ -137,48 +142,6 @@ void dns_format(unsigned char* dns, char* host) {
     *dns++='\0';
 }
 
-// 
-// funkce inspirovana z: http://man7.org/linux/man-pages/man3/getaddrinfo.3.html?fbclid=IwAR1nM16wJIbbV9qvZ6yES__aYIfzpN63QYpDA53Ce6t425TGtsAxvzpeu60
-void reverse_dns(char *hostname) {
-
-	int sfd; // socket return
-    struct addrinfo hints, *infoptr, *rp;
-    memset(&hints, 0, sizeof(hints)); // vynulovani hints
-
-    hints.ai_family = AF_UNSPEC; // nespecifikovano jestli ipv4 nebo ipv6
-    hints.ai_socktype = SOCK_DGRAM;
-    hints.ai_flags = 0;
-    hints.ai_protocol = 0;
-
-    int result = getaddrinfo(hostname, NULL, &hints, &infoptr);
-    if (result) {
-        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(result));
-        exit(1); // protoze jsme v main nic nealokovali, muzeme pouzit bez obav exit()
-    }
-
-	char ip[256];
-
-    for (rp = infoptr; rp != NULL; rp = rp->ai_next) {
-
-        sfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol); // socket pro overeni funkcnosti adresy
-
-        if (sfd == -1)
-            continue;
-        if (connect(sfd, rp->ai_addr, rp->ai_addrlen) != -1) { // podarilo se navazat spojeni s jednou z adres
-            getnameinfo(rp->ai_addr, rp->ai_addrlen, ip, sizeof(ip), NULL, 0, NI_NUMERICHOST); // uloz adresu do bufferu
-			printf("IP: %s\n",ip); // vytiskni adresu na vystup
-        }
-        close(sfd);
-    }
-
-    if (infoptr == NULL) { // nebyly nalezeny zadne adresy k domenovemu jmenu
-        fprintf(stderr, "Nelze navazat spojeni s hostname.\n");
-        exit(1);
-    }
-
-	freeaddrinfo(infoptr); // uvolni systemove alokovany buffer
-}
-
 // lehka inspirace parsovani s pouzitim offsetu z: https://gist.github.com/fffaraz/9d9170b57791c28ccda9255b48315168
 void parser(unsigned char *result, unsigned char* pos, unsigned char* dgram, int* stuck) {
  
@@ -225,4 +188,202 @@ void parser(unsigned char *result, unsigned char* pos, unsigned char* dgram, int
         i++; // prejdi na dalsi label
     }
     result[i-1]='\0'; // smaz posledni tecku
+}
+
+// vytiskni odpovedi na vystup
+int print_answers(int cnt, int *size, unsigned char *dgram, int *pos, unsigned char *position, unsigned char *content, char *cl, char *tp, char *typ) {
+
+	printf("%s (%i)\n",typ,cnt);
+
+	if(cnt) { // existuji nejake odpovedi
+
+		for(int i = 0; i < cnt; i++) { // naparsuj postupne kazdou odpoved
+
+			memset(tp,'\0',6);
+			memset(cl,'\0',3);
+		
+			position = (unsigned char *)&dgram[*size]; // nastav pozici za question blok	
+		
+			parser(content, position, dgram, pos);
+			
+			(*size) += (*pos); // pricti delku retezce Rname
+			
+			RR *rr = (RR *)&dgram[*size];
+
+			//rr->ttl = 55555;
+
+			if(ntohs(rr->cl) == 1) {
+				strcpy(cl,"IN");
+			}
+			else if(ntohs(rr->cl) == 2) {
+				strcpy(cl,"CS");
+			}
+			else if(ntohs(rr->cl) == 3) {
+				strcpy(cl,"CH");
+			}
+			else if(ntohs(rr->cl) == 4) {
+				strcpy(cl,"HS");
+			}
+			else {
+				strcpy(cl,"???");
+			}
+
+			if(ntohs(rr->type) == 1) {
+				strcpy(tp,"A");
+			}
+			else if(ntohs(rr->type) == 2) {
+				strcpy(tp,"NS");
+			}
+			else if(ntohs(rr->type) == 3) {
+				strcpy(tp,"MD");
+			}
+			else if(ntohs(rr->type) == 4) {
+				strcpy(tp,"MF");
+			}						
+			else if(ntohs(rr->type) == 5) {
+				strcpy(tp,"CNAME");
+			}
+			else if(ntohs(rr->type) == 6) {
+				strcpy(tp,"SOA");
+			}
+			else if(ntohs(rr->type) == 7) {
+				strcpy(tp,"MB");
+			}
+			else if(ntohs(rr->type) == 8) {
+				strcpy(tp,"MG");
+			}	
+			else if(ntohs(rr->type) == 9) {
+				strcpy(tp,"MR");
+			}
+			else if(ntohs(rr->type) == 10) {
+				strcpy(tp,"NULL");
+			}
+			else if(ntohs(rr->type) == 11) {
+				strcpy(tp,"WKS");
+			}
+			else if(ntohs(rr->type) == 12) {
+				strcpy(tp,"PTR");
+			}	
+			else if(ntohs(rr->type) == 13) {
+				strcpy(tp,"HINFO");
+			}
+			else if(ntohs(rr->type) == 14) {
+				strcpy(tp,"MINFO");
+			}
+			else if(ntohs(rr->type) == 15) {
+				strcpy(tp,"MX");
+			}
+			else if(ntohs(rr->type) == 16) {
+				strcpy(tp,"TXT");
+			}	
+			else if(ntohs(rr->type) == 28) {
+				strcpy(tp,"AAAA");
+			}
+			else {
+				strcpy(tp,"???");
+			}
+			
+			printf("%s\t%s\t%s\t%d\t", content, cl, tp, htonl(rr->ttl));
+			
+			*size += sizeof(RR);
+
+			position = (unsigned char *)&dgram[*size]; // nastav pozici pred Rdata
+			
+			// VYPSANI ODPOVEDI
+			// kompletne podporovane: CNAME / A / AAAA / NS / PTR / SOA
+			// podpora vypisu hex dat: jakekoliv dalsi zaznamy
+			
+			if(ntohs(rr->type) == 5 || ntohs(rr->type) == 2 || ntohs(rr->type) == 12 || ntohs(rr->type) == 6) { // CNAME, NS, PTR, SOA
+				parser(content, position, dgram, pos); // naparsuj textovy zaznam
+				printf("%s",content);
+			}
+			else if(ntohs(rr->type) == 1) { // A zaznam
+				if(ntohs(rr->rdlen) != 4) {
+					fprintf(stderr,"Chybna delka dat v odpovedi.\n");
+					return 1;
+				}
+				memset(content, '\0', 256); // vynuluj buffer
+				memcpy(content, position, 4); // zkopiruj ip adresu do bufferu							
+				for(int i = 0; i < 4; i++) {
+					printf("%i",content[i]);
+					if(i != 3)
+						printf(".");
+				}         											
+			}
+			else if(ntohs(rr->type) == 28) { // AAAA zaznam
+			
+				if(ntohs(rr->rdlen) != 16) {
+					fprintf(stderr,"Chybna delka dat v odpovedi.\n");
+					return 1;
+				}
+			
+				memset(content, '\0', 256); // vynuluj buffer
+				memcpy(content, position, 16); // zkopiruj ip adresu do bufferu							
+				
+				for(int i = 0; i < 16; i++) {
+					printf("%02x",content[i]);
+					if(i % 2 && i != 15)
+						printf(":");
+				}         											
+			}	
+			else {
+				for(int i = 0; i < ntohs(rr->rdlen); i++) { // naparsuj to a vypis to jako hex data
+					printf("%X", position[i]);
+				}
+			}
+								
+			printf("\n");
+			
+			*size += ntohs(rr->rdlen); // preskoc Rdata a pokracuj dal
+			
+		}	
+		
+		// zadne dalsi odpovedi
+		
+		printf("\n");
+	}	
+	
+	return 0;		
+
+}
+
+// over jestli se jedna o validni ip adresu a zaroven ji preved do formatu na reverzni dotaz
+bool revert_ip(char *ip) {
+	
+	struct sockaddr_in sa;
+	struct in6_addr sa6;
+
+	if(inet_pton(AF_INET, ip, &(sa.sin_addr))) {
+		int a,b,c,d;
+		sscanf(ip,"%d.%d.%d.%d",&a,&b,&c,&d);
+		sprintf(ip, "%d.%d.%d.%d", d, c, b, a);
+		strcat(ip,".in-addr.arpa");	
+		return true;
+	}
+	
+	if(inet_pton(AF_INET6, ip, &sa6)) {
+  		sprintf(ip,"%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
+                 		(int)sa6.s6_addr[0], (int)sa6.s6_addr[1],
+                 		(int)sa6.s6_addr[2], (int)sa6.s6_addr[3],
+                 		(int)sa6.s6_addr[4], (int)sa6.s6_addr[5],
+                 		(int)sa6.s6_addr[6], (int)sa6.s6_addr[7],
+                 		(int)sa6.s6_addr[8], (int)sa6.s6_addr[9],
+                 		(int)sa6.s6_addr[10], (int)sa6.s6_addr[11],
+                 		(int)sa6.s6_addr[12], (int)sa6.s6_addr[13],
+                 		(int)sa6.s6_addr[14], (int)sa6.s6_addr[15]);		
+		char result[100];
+		memset(result,'\0',100);		
+		int j = 0;
+		for(int i = 31; i >= 0; i--) {
+			result[j] = ip[i];
+			j++;
+			result[j] = '.';
+			j++;
+		}		
+		memset(ip,'\0',100);
+		strcpy(ip,result);		
+		strcat(ip,"ip6.arpa");	
+		return true;	
+	}
+	return false;	
 }
