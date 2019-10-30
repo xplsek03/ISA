@@ -1,8 +1,8 @@
 #include <stdbool.h>
 
-bool validate_ip(char *ip); // over ip adresu
+bool validate_ip(char *ip, bool *v6); // over ip adresu
 int validate_port(char *port); // over port
-char *validate_hostname(char *hostname); // over server
+void validate_hostname(char *hostname); // over server
 void validate_string(char *url); // over dom. jmeno
 void dns_format(unsigned char* dns,char* host); // adresa->dns format
 void parser(unsigned char *result, unsigned char* pos, unsigned char* dgram, int* zarazka);

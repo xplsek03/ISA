@@ -16,13 +16,16 @@
 #endif
 
 // over jestli se jedna o validni ip adresu
-bool validate_ip(char *ip) {
-	struct sockaddr_in sa;
-	if(inet_pton(AF_INET, ip, &(sa.sin_addr)) || inet_pton(AF_INET6, ip, &(sa.sin_addr))) {
+bool validate_ip(char *ip, bool *v6) {
+	char buffer[16];
+	if(inet_pton(AF_INET, ip, buffer)) {// platna ipv4 adresa
+		return true;
+	}
+	else if(inet_pton(AF_INET6, ip, buffer)) { // platna ipv6 adresa
+		*v6 = true; // pro odeslani nastavit socket na ipv6
 		return true;
 	}
 	return false;
-	
 }
 
 // over zda se jedna o validni port
@@ -39,7 +42,7 @@ int validate_port(char *port) {
 
 // over domenove jmeno
 // funkce inspirovana z: http://man7.org/linux/man-pages/man3/getaddrinfo.3.html?fbclid=IwAR1nM16wJIbbV9qvZ6yES__aYIfzpN63QYpDA53Ce6t425TGtsAxvzpeu60
-char *validate_hostname(char *hostname) {
+void validate_hostname(char *hostname) {
 
 	int sfd; // socket return
     struct addrinfo hints, *infoptr, *rp;
@@ -57,9 +60,7 @@ char *validate_hostname(char *hostname) {
     }
 
 	char ip[256];
-
-	char *new_ip = malloc(sizeof(char) * 256); // alokuj cilovou ip adresu
-    memset(new_ip, '\0', 256);
+	memset(ip, '\0', 256);
 
     for (rp = infoptr; rp != NULL; rp = rp->ai_next) {
 
@@ -76,13 +77,11 @@ char *validate_hostname(char *hostname) {
 
     if (rp == NULL) { // nebyly nalezeny zadne adresy k domenovemu jmenu
         fprintf(stderr, "Nelze navazat spojeni s hostname.\n");
-        free(new_ip);
         exit(1);
     }
 
 	freeaddrinfo(infoptr); // uvolni systemove alokovany buffer
-    strcpy(new_ip,ip);
-    return new_ip; // vrat nalezenou adresu nebo retezec delky 0
+    strcpy(hostname,ip);
 }
 
 // over jestli je poptavana adresa validni retezec
@@ -127,10 +126,10 @@ void validate_string(char *url) {
 
 // funkce vypujcena od: https://gist.github.com/fffaraz/9d9170b57791c28ccda9255b48315168
 void dns_format(unsigned char* dns, char* host) {
-    int lock = 0, i;
-    strcat((char*)host,".");
-     
-    for(i=0; i < strlen((char*)host); i++) {
+	int lock = 0;
+	
+    strcat((char*)host,"."); 
+    for(int i = 0; i < strlen((char*)host); i++) {
         if(host[i]=='.') {
             *dns++ = i-lock;
             for(;lock<i;lock++) {
@@ -371,8 +370,8 @@ bool revert_ip(char *ip) {
                  		(int)sa6.s6_addr[10], (int)sa6.s6_addr[11],
                  		(int)sa6.s6_addr[12], (int)sa6.s6_addr[13],
                  		(int)sa6.s6_addr[14], (int)sa6.s6_addr[15]);		
-		char result[100];
-		memset(result,'\0',100);		
+		char result[256];
+		memset(result,'\0',256);		
 		int j = 0;
 		for(int i = 31; i >= 0; i--) {
 			result[j] = ip[i];
@@ -380,7 +379,7 @@ bool revert_ip(char *ip) {
 			result[j] = '.';
 			j++;
 		}		
-		memset(ip,'\0',100);
+		memset(ip,'\0',256);
 		strcpy(ip,result);		
 		strcat(ip,"ip6.arpa");	
 		return true;	

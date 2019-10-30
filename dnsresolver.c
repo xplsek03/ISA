@@ -18,21 +18,20 @@ int main (int argc, char **argv) {
 	bool x_on = false; // reverse
 	bool six_on = false; // ipv6
 	bool s_on = false; // server musi byt zadany
+	bool v6 = false; // pokud se ma pouzit ipv6 adresa pro odeslani (-s)
 
 	// hodnoty
 	int p_val; // cilova hodnota portu jako int
-	char s_val[255]; // server
-	char *p_val_str = "53"; // port jako string
-	char ip_val[100]; // dotazovana adresa
-	memset(ip_val,'\0',100);
+	char s_val[256]; // server
+	char p_val_str[6]; // port
+	memset(p_val_str,'\0',6);
+	strcpy(p_val_str,"53");	
+	char ip_val[256]; // dotazovana adresa
+	memset(ip_val,'\0',256);
 	
 	// countery getopt
 	int index;
 	int c;
-
-	// ruzne dalsi
-	char *replace; // retezec pro pripad prevodu serveru na ip
-	bool free_replace = false; // abychom nevolali free na neco co jsme nealokovali
 	
 	opterr = 0;
 
@@ -55,7 +54,7 @@ int main (int argc, char **argv) {
 					strcpy(s_val, optarg);
 					break;
 				case 'p':
-					p_val_str = optarg;
+					strcpy(p_val_str, optarg);
 					break;
 				case '?':
 					if (optopt == 'p' || optopt == 's') // chybejici hodnoty
@@ -107,29 +106,21 @@ int main (int argc, char **argv) {
         fprintf(stderr, "Port neni spravne zadany.\n");
         return 1;
     }
+    
+	if(!validate_ip(s_val, &v6)) { // zadany server neni platna ip adresa
+		validate_hostname(s_val); // vrat funkcni ip adresu z domenoveho jmena a nahrad za puvodni hostname
 
-	if(!validate_ip(s_val)) { // zadany server neni platna ip adresa
-
-		free_replace = true; // v pripade ze budeme muset v budoucnu zavolat free() na s_val
-		replace = validate_hostname(s_val); // vrat funkcni ip adresu z domenoveho jmena
-		strcpy(s_val, replace); // nahrad puvodni hostname serveru jeho ip adresou
-
-		if(!strlen(replace)) {
+		if(!strlen(s_val)) {
 			fprintf (stderr,"Nepodarilo se pripojit k zadne IP adrese zadaneho dns serveru.\n");
-			goto error;
+			return 1;
 		}
 	}
 
 	// ******** PLNENI DATAGRAMU *********
 
-	unsigned char dgram[65536]; // datagram
-
-	// struktury datagramu
-	HEADER *header = NULL; // hlavicka
-	Q *q = NULL; // question
 	int size = 0; // aby nebylo potreba prepocitavat pozici v datagramu
-
-	header = (HEADER *)&dgram;
+	unsigned char dgram[65536]; // datagram
+	HEADER *header = (HEADER *)&dgram;
 	header->id = (unsigned short)htons(getpid());
 	header->guts = htons(0);
 	if(r_on) {
@@ -146,46 +137,87 @@ int main (int argc, char **argv) {
 	unsigned char *position = (unsigned char *)&dgram[size];
 	
 	dns_format(position, ip_val); // preved adresu do dns formatu
+
+	// DNS FORMAT SEGFAULT PRO IPV6 ADDR
 	
 	size += strlen((const char *)position) + 1;
 
-	q = (Q *)&dgram[size];
-	if(six_on)
-		q->type = htons(28); // AAAA
-	else if(x_on)
+	Q *q = (Q *)&dgram[size];	
+	if(x_on) {
 		q->type = htons(12); // PTR, reverzni lookup
-	else
+	}
+	else if(six_on) {
+		q->type = htons(28); // AAAA
+	}
+	else {
 		q->type = htons(1); // A
+	}
+	
 	q->cl = htons(1); // IN
 
 	size += sizeof(Q);
 
 	// ******** ODESLANI DATAGRAMU *********
 
-    struct sockaddr_in dest; // server socket
-    dest.sin_family = AF_INET;
-    dest.sin_addr.s_addr = inet_addr(s_val); // adresa
-    dest.sin_port = htons(p_val); // port
+	int s; // socket
 
-    int s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-
-	struct timeval timeout;
-	timeout.tv_sec = 5; // nastav timeout na 5s, kdyby neprisla odpoved 
-	if (setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
-    	perror("Neprisla zadna odpoved.\n");
+	if(v6) { // IPv6
+    	struct sockaddr_in6 dest; // server socket
+    	memset(&dest, 0, sizeof(dest));
+    	dest.sin6_family = AF_INET6;
+    	dest.sin6_port = htons(p_val); // port
+		inet_pton(AF_INET6, s_val, &(dest.sin6_addr)); // ipv6 addr
+		
+		s = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
+		if(s == -1) {
+			fprintf(stderr,"Nelze vytvorit socket.\n");
+			return 1;
+		}
+		struct timeval timeout; // timeout socketu
+		timeout.tv_sec = 5; // nastav timeout na 5s, kdyby neprisla odpoved 
+		if (setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
+			perror("Setsockopt error.\n");
+		}
+		
+		if(sendto(s, dgram, size, 0, (struct sockaddr*)&dest, sizeof(dest)) < 0) { // odeslani datagramu
+			perror("Chyba pri odesilani dat.\n"); // vystup s kodem na stderr
+			return 1;
+		}
+		int incoming = sizeof(dest);
+		if(recvfrom(s,dgram, 65536 , 0, (struct sockaddr*)&dest, (socklen_t*)&incoming) < 0) {
+			perror("Chyba pri prijimani dat.\n");
+		}
 	}
-
-	if(sendto(s, dgram, size, 0, (struct sockaddr*)&dest, sizeof(dest)) < 0) { // odeslani datagramu
-        perror("Chyba pri odesilani dat.\n"); // vystup s kodem na stderr
-        goto error;
-    }
+	else { // IPv4
+    	struct sockaddr_in dest; // server socket
+    	memset(&dest, 0, sizeof(dest));
+    	dest.sin_family = AF_INET;
+    	dest.sin_addr.s_addr = inet_addr(s_val); // ipv4 adresa
+    	dest.sin_port = htons(p_val); // port
+    	
+		s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+		if(s == -1) {
+			fprintf(stderr,"Nelze vytvorit socket.\n");
+			return 1;
+		}
+		struct timeval timeout; // timeout socketu
+		timeout.tv_sec = 5; // nastav timeout na 5s, kdyby neprisla odpoved 
+		if (setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
+			perror("Setsockopt error.\n");
+		}
+		
+		if(sendto(s, dgram, size, 0, (struct sockaddr*)&dest, sizeof(dest)) < 0) { // odeslani datagramu
+			perror("Chyba pri odesilani dat.\n"); // vystup s kodem na stderr
+			return 1;
+		}
+		int incoming = sizeof(dest);
+		if(recvfrom(s,dgram, 65536 , 0, (struct sockaddr*)&dest, (socklen_t*)&incoming) < 0) {
+			perror("Chyba pri prijimani dat.\n");
+		}
+	}
     
+	
     // ******** ZPRACOVANI ODPOVEDI *********
-
-    int incoming = sizeof(dest);
-    if(recvfrom(s,dgram, 65536 , 0, (struct sockaddr*)&dest, (socklen_t*)&incoming) < 0) {
-        perror("Chyba pri prijimani dat.\n");
-    }
 
 	header = (HEADER *)&dgram;
 
@@ -193,7 +225,7 @@ int main (int argc, char **argv) {
 
 		if(r_on && !((htons(header->guts) >> 15) & 1U)) { // pokud chceme rekurzi a neni dostupna, vyhod chybu
 			fprintf(stderr,"Rekurze neni na tomto serveru dostupna.\n");
-			goto error;
+			return 1;
 		}
 		
 		if(((htons(header->guts) >> 0) & 1U) || ((htons(header->guts) >> 1) & 1U) 
@@ -202,34 +234,34 @@ int main (int argc, char **argv) {
 			if(((htons(header->guts) >> 0) & 1U) && !((htons(header->guts) >> 1) & 1U) 
 			&& !((htons(header->guts) >> 2) & 1U) && !((htons(header->guts) >> 3) & 1U)) {
 				fprintf(stderr,"Server nedokaze vyhodnotit pozadavek.\n");
-				goto error;
+				return 1;
 			}
 			else if(!((htons(header->guts) >> 0) & 1U) && ((htons(header->guts) >> 1) & 1U) 
 			&& !((htons(header->guts) >> 2) & 1U) && !((htons(header->guts) >> 3) & 1U)) {
 				fprintf(stderr,"Server se nemuze pripojit k nameserveru.\n");
-				goto error;
+				return 1;
 			}
 
 			else if(((htons(header->guts) >> 0) & 1U) && ((htons(header->guts) >> 1) & 1U) 
 			&& !((htons(header->guts) >> 2) & 1U) && !((htons(header->guts) >> 3) & 1U)) {
 				fprintf(stderr,"Domenove jmeno neexistuje.\n");
-				goto error;
+				return 1;
 			}				
 
 			else if(!((htons(header->guts) >> 0) & 1U) && !((htons(header->guts) >> 1) & 1U) 
 			&& ((htons(header->guts) >> 2) & 1U) && !((htons(header->guts) >> 3) & 1U)) {
 				fprintf(stderr,"Server tento typ pozadavku neimplementuje.\n");
-				goto error;
+				return 1;
 			}	
 
 			else if(((htons(header->guts) >> 0) & 1U) && !((htons(header->guts) >> 1) & 1U) 
 			&& ((htons(header->guts) >> 2) & 1U) && !((htons(header->guts) >> 3) & 1U)) {
 				fprintf(stderr,"Server pozadavek zamitnul.\n");
-				goto error;
+				return 1;
 			}	
 			else {
 				fprintf(stderr,"Neznama chyba.\n");
-				goto error;
+				return 1;
 			}
 		}
 
@@ -274,7 +306,7 @@ int main (int argc, char **argv) {
 			}
 			else {
 				fprintf(stderr,"Nepodporovana trida question.\n");
-				goto error;
+				return 1;
 			}
 			
 			if(ntohs(q->type) == 1) {
@@ -288,7 +320,7 @@ int main (int argc, char **argv) {
 			}
 			else {
 				fprintf(stderr,"Nepodporovany typ question: %i.\n",ntohs(q->type));
-				goto error;
+				return 1;
 			}							
 			
 			printf("QUESTION\n%s\t%s\t%s\n", content, cl, tp);
@@ -297,27 +329,22 @@ int main (int argc, char **argv) {
 			size += sizeof(Q); // preskoc question blok
 			
 			if(print_answers(ntohs(header->acount), &size, dgram, &pos, position, content, cl, tp, "ANSWERS"))
-				goto error; // neco bylo spatne naformatovane		
+				return 1; // neco bylo spatne naformatovane		
 
 			if(print_answers(ntohs(header->aucount), &size, dgram, &pos, position, content, cl, tp, "AUTHORITATIVE ANSWERS"))
-				goto error; // neco bylo spatne naformatovane		
+				return 1; // neco bylo spatne naformatovane		
 
 			if(print_answers(ntohs(header->addcount), &size, dgram, &pos, position, content, cl, tp, "ADDITIONAL ANSWERS"))
-				goto error; // neco bylo spatne naformatovane					
+				return 1; // neco bylo spatne naformatovane					
 		}
 			
 		else { // pokud neobsahuje question
 			fprintf(stderr,"Datagram neobsahuje dotaz nebo je vic nez 1.\n");
-			goto error;
+			return 1;
 		}     	
     }
      
 	
 	return 0;	
-	
-	error: // od radku 
-		if(free_replace) // pokud jsme alokovali char *replace, uvolni ho
-			free(replace);
-		return 1;
 	
 }
