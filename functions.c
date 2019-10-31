@@ -11,11 +11,14 @@
 #include <sys/socket.h>
 #include <netdb.h>
 
+// struktura RR
 #ifndef FUNCTIONS_H
 #include "functions.h"
 #endif
 
 // over jestli se jedna o validni ip adresu
+// @ret true platna adresa
+// @ret false neplatna adresa
 bool validate_ip(char *ip, bool *v6) {
 	char buffer[16];
 	if(inet_pton(AF_INET, ip, buffer)) {// platna ipv4 adresa
@@ -29,6 +32,8 @@ bool validate_ip(char *ip, bool *v6) {
 }
 
 // over zda se jedna o validni port
+// @ret int cislo portu
+// @ret -1 nevalidni port
 int validate_port(char *port) {
     char *ptr;
     long ret;
@@ -44,50 +49,54 @@ int validate_port(char *port) {
 // funkce inspirovana z: http://man7.org/linux/man-pages/man3/getaddrinfo.3.html?fbclid=IwAR1nM16wJIbbV9qvZ6yES__aYIfzpN63QYpDA53Ce6t425TGtsAxvzpeu60
 void validate_hostname(char *hostname) {
 
-	int sfd; // socket return
+	int sfd; // docket
     struct addrinfo hints, *infoptr, *rp;
-    memset(&hints, 0, sizeof(hints)); // vynulovani hints
+    memset(&hints, 0, sizeof(hints));
 
     hints.ai_family = AF_UNSPEC; // nespecifikovano jestli ipv4 nebo ipv6
     hints.ai_socktype = SOCK_DGRAM;
     hints.ai_flags = 0;
     hints.ai_protocol = 0;
 
-    int result = getaddrinfo(hostname, NULL, &hints, &infoptr);
+    int result = getaddrinfo(hostname, NULL, &hints, &infoptr); // ziskani seznamu ip adres
     if (result) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(result));
         exit(1); // protoze jsme v main nic nealokovali, muzeme pouzit bez obav exit()
     }
 
-	char ip[256];
+	bool f = false; // nalezena funkcni adresa
+	char ip[256]; // buffer pro ip adresu
 	memset(ip, '\0', 256);
 
-    for (rp = infoptr; rp != NULL; rp = rp->ai_next) {
+    for (rp = infoptr; rp != NULL; rp = rp->ai_next) { // overuj adresy, dokud se nedostanes k funkcni
 
         sfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol); // socket pro overeni funkcnosti adresy
-
         if (sfd == -1)
             continue;
+			
         if (connect(sfd, rp->ai_addr, rp->ai_addrlen) != -1) { // podarilo se navazat spojeni s jednou z adres
             getnameinfo(rp->ai_addr, rp->ai_addrlen, ip, sizeof(ip), NULL, 0, NI_NUMERICHOST); // uloz adresu do bufferu
-            break;
+            close(sfd); // zavri socket
+			break;
         }
-        close(sfd);
+		close(sfd); // zavri socket
     }
 
-    if (rp == NULL) { // nebyly nalezeny zadne adresy k domenovemu jmenu
+    if (!f) { // nebyly nalezeny zadne adresy k domenovemu jmenu
         fprintf(stderr, "Nelze navazat spojeni s hostname.\n");
         exit(1);
     }
 
 	freeaddrinfo(infoptr); // uvolni systemove alokovany buffer
-    strcpy(hostname,ip);
+	
+	memset(hostname,'\0',256);
+    strcpy(hostname,ip); // prepis hostname na ip adresu
 }
 
-// over jestli je poptavana adresa validni retezec
+// over jestli je hledana adresa validni retezec
 void validate_string(char *url) {
 
-	if(strlen(url) < 3 || strlen(url) > 255)
+	if(strlen(url) < 3 || strlen(url) > 255) // nevyhovuje delka adresy
 		goto fail;
 
 	if(url[0] == '.' || url[0] == '-' || url[strlen(url)-1] == '.' || url[strlen(url)-1] == '-')
@@ -96,7 +105,6 @@ void validate_string(char *url) {
 	int label_c = 0; // pocet znaku jednoho labelu
 
 	for(int i = 0; i < strlen(url); i++) {
-
 		label_c++; // pridat znak do labelu
 
 		if(!isalnum(url[i]) && url[i] != '-' && url[i] != '.')
@@ -124,11 +132,12 @@ void validate_string(char *url) {
 
 }
 
-// funkce vypujcena od: https://gist.github.com/fffaraz/9d9170b57791c28ccda9255b48315168
+// INSPIROVANO Z: https://gist.github.com/fffaraz/9d9170b57791c28ccda9255b48315168
+// prevod retezce s domenou na dns format
 void dns_format(unsigned char* dns, char* host) {
 	int lock = 0;
 	
-    strcat((char*)host,"."); 
+    strcat((char*)host,".");
     for(int i = 0; i < strlen((char*)host); i++) {
         if(host[i]=='.') {
             *dns++ = i-lock;
@@ -141,25 +150,26 @@ void dns_format(unsigned char* dns, char* host) {
     *dns++='\0';
 }
 
-// lehka inspirace parsovani s pouzitim offsetu z: https://gist.github.com/fffaraz/9d9170b57791c28ccda9255b48315168
+// INSPIRACE pouziti offsetu: https://gist.github.com/fffaraz/9d9170b57791c28ccda9255b48315168
+// parsovani stringu, ktery je soucasti dns datagramu
 void parser(unsigned char *result, unsigned char* pos, unsigned char* dgram, int* stuck) {
  
  	memset(result,'\0',256);
     
-    int c = 0; // counter po jednom znaku
+    int c = 0; // counter zapisu do bufferu
     bool off = false; // jestli obsahuje offset
     int offset; // pozice offsetu
  
-    *stuck = 1;
+    *stuck = 1; // delka retezce
  
     while(*pos != 0) { // dokud nenarazi na konec question name
     
-        if(*pos >= 192) {
-            offset = (*pos) * 256 + *(pos+1) - 49152; // 1100000000000000
-            pos = dgram + offset - 1;
+        if(*pos >= 192) { // nastavene nejvyssi dva bity, je to pointer
+            offset = (*pos) * 256 + *(pos+1) - 49152; // 49152 ma nastavene nejvyssi bity: 1100000000000000, ty pomoci odecteni odstrani bity v pozici kam ukazuje pointer
+            pos = dgram + offset - 1; // vypocitej presnou pozici
             off = true; // preskocime pomoci ukazatele jinam
         }
-     	else {
+     	else { // znak, uloz a pokracuj
             result[c] = *pos;
 			c++;
  		}
@@ -172,15 +182,14 @@ void parser(unsigned char *result, unsigned char* pos, unsigned char* dgram, int
     }
  
     if(off) { // doslo k vyskytu ukazatele
-        *stuck += 1; // posun se dal v datagramu
+        *stuck += 1; // posun se o znak dal v datagramu
 	}
 
- 	int i = 0; // formatovani adresy
- 	 
+ 	int i = 0; // citac formatovani adresy
     while(i < strlen((const char *)result)) {
         c = result[i]; // vezmi cislo na zacatku labelu
         for(int j = 0; j < c; j++) {
-            result[i] = result[i+1]; // nacti do result spranvy pocet znaku labelu
+            result[i] = result[i+1]; // nacti do result spravny pocet znaku labelu
             i++;
         }
         result[i]='.'; // pridej tecku
@@ -190,6 +199,8 @@ void parser(unsigned char *result, unsigned char* pos, unsigned char* dgram, int
 }
 
 // vytiskni odpovedi na vystup
+// @ret 0 v poradku
+// @ret 1 chyba
 int print_answers(int cnt, int *size, unsigned char *dgram, int *pos, unsigned char *position, unsigned char *content, char *cl, char *tp, char *typ) {
 
 	printf("%s (%i)\n",typ,cnt);
@@ -198,19 +209,17 @@ int print_answers(int cnt, int *size, unsigned char *dgram, int *pos, unsigned c
 
 		for(int i = 0; i < cnt; i++) { // naparsuj postupne kazdou odpoved
 
+			// promenne pro typ a tridu odpovedi
 			memset(tp,'\0',6);
 			memset(cl,'\0',3);
 		
 			position = (unsigned char *)&dgram[*size]; // nastav pozici za question blok	
 		
-			parser(content, position, dgram, pos);
-			
+			parser(content, position, dgram, pos); // uloz retezec Rname
 			(*size) += (*pos); // pricti delku retezce Rname
-			
-			RR *rr = (RR *)&dgram[*size];
+			RR *rr = (RR *)&dgram[*size]; // struktura odpovedi
 
-			//rr->ttl = 55555;
-
+			// naparsuj tridu
 			if(ntohs(rr->cl) == 1) {
 				strcpy(cl,"IN");
 			}
@@ -227,6 +236,7 @@ int print_answers(int cnt, int *size, unsigned char *dgram, int *pos, unsigned c
 				strcpy(cl,"???");
 			}
 
+			// naparsuj typ
 			if(ntohs(rr->type) == 1) {
 				strcpy(tp,"A");
 			}
@@ -284,20 +294,19 @@ int print_answers(int cnt, int *size, unsigned char *dgram, int *pos, unsigned c
 			
 			printf("%s\t%s\t%s\t%d\t", content, cl, tp, htonl(rr->ttl));
 			
-			*size += sizeof(RR);
-
+			*size += sizeof(RR); // skoc za strukturu
 			position = (unsigned char *)&dgram[*size]; // nastav pozici pred Rdata
 			
 			// VYPSANI ODPOVEDI
-			// kompletne podporovane: CNAME / A / AAAA / NS / PTR / SOA
+			// kompletne podporovane: CNAME / A / AAAA / NS / PTR / SOA / TXT
 			// podpora vypisu hex dat: jakekoliv dalsi zaznamy
 			
-			if(ntohs(rr->type) == 5 || ntohs(rr->type) == 2 || ntohs(rr->type) == 12 || ntohs(rr->type) == 6) { // CNAME, NS, PTR, SOA
-				parser(content, position, dgram, pos); // naparsuj textovy zaznam
+			if(ntohs(rr->type) == 5 || ntohs(rr->type) == 2 || ntohs(rr->type) == 12 || ntohs(rr->type) == 6 || ntohs(rr->type) == 16) { // CNAME / A / AAAA / NS / PTR / SOA / TXT
+				parser(content, position, dgram, pos); // naparsuj Rdata
 				printf("%s",content);
 			}
 			else if(ntohs(rr->type) == 1) { // A zaznam
-				if(ntohs(rr->rdlen) != 4) {
+				if(ntohs(rr->rdlen) != 4) { // delka neni 4
 					fprintf(stderr,"Chybna delka dat v odpovedi.\n");
 					return 1;
 				}
@@ -311,7 +320,7 @@ int print_answers(int cnt, int *size, unsigned char *dgram, int *pos, unsigned c
 			}
 			else if(ntohs(rr->type) == 28) { // AAAA zaznam
 			
-				if(ntohs(rr->rdlen) != 16) {
+				if(ntohs(rr->rdlen) != 16) { // delka neni 16
 					fprintf(stderr,"Chybna delka dat v odpovedi.\n");
 					return 1;
 				}
@@ -325,8 +334,8 @@ int print_answers(int cnt, int *size, unsigned char *dgram, int *pos, unsigned c
 						printf(":");
 				}         											
 			}	
-			else {
-				for(int i = 0; i < ntohs(rr->rdlen); i++) { // naparsuj to a vypis to jako hex data
+			else { // ostatni typy jako HEX
+				for(int i = 0; i < ntohs(rr->rdlen); i++) {
 					printf("%X", position[i]);
 				}
 			}
@@ -334,12 +343,9 @@ int print_answers(int cnt, int *size, unsigned char *dgram, int *pos, unsigned c
 			printf("\n");
 			
 			*size += ntohs(rr->rdlen); // preskoc Rdata a pokracuj dal
-			
 		}	
 		
-		// zadne dalsi odpovedi
-		
-		printf("\n");
+		printf("\n"); // zadne dalsi odpovedi
 	}	
 	
 	return 0;		
@@ -347,12 +353,14 @@ int print_answers(int cnt, int *size, unsigned char *dgram, int *pos, unsigned c
 }
 
 // over jestli se jedna o validni ip adresu a zaroven ji preved do formatu na reverzni dotaz
+// @ret true validni
+// @ret false nevalidni
 bool revert_ip(char *ip) {
 	
-	struct sockaddr_in sa;
-	struct in6_addr sa6;
+	struct sockaddr_in sa; // ipv4
+	struct in6_addr sa6; // ipv6
 
-	if(inet_pton(AF_INET, ip, &(sa.sin_addr))) {
+	if(inet_pton(AF_INET, ip, &(sa.sin_addr))) { // validni ipv4 adresa
 		int a,b,c,d;
 		sscanf(ip,"%d.%d.%d.%d",&a,&b,&c,&d);
 		sprintf(ip, "%d.%d.%d.%d", d, c, b, a);
@@ -360,7 +368,7 @@ bool revert_ip(char *ip) {
 		return true;
 	}
 	
-	if(inet_pton(AF_INET6, ip, &sa6)) {
+	if(inet_pton(AF_INET6, ip, &sa6)) { // validni ipv6 adresa
   		sprintf(ip,"%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
                  		(int)sa6.s6_addr[0], (int)sa6.s6_addr[1],
                  		(int)sa6.s6_addr[2], (int)sa6.s6_addr[3],
@@ -373,7 +381,7 @@ bool revert_ip(char *ip) {
 		char result[256];
 		memset(result,'\0',256);		
 		int j = 0;
-		for(int i = 31; i >= 0; i--) {
+		for(int i = 31; i >= 0; i--) { // otoc poradi a pridavej tecky za kazdy byte
 			result[j] = ip[i];
 			j++;
 			result[j] = '.';
