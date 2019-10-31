@@ -34,6 +34,11 @@ int main (int argc, char **argv) {
 	int c;
 	opterr = 0;
 
+	if(argc == 2 && !strcmp(argv[1],"--help")) { // napoveda --help
+		printf("Resolver xplsek03\n\npouziti: [-x] [-6] [-r] -s server [-p] ip|domena\n-x\treverzni dotaz\n-6\tAAAA dotaz\n-r\trekurzivni dotaz\n-s\tdns server\n-p\tport\n");
+		return 0;
+	}
+
 	if(argc >= 4 && argc <= 9) { // argumentu je spravny pocet
 
 		// INSPIRACE START
@@ -268,7 +273,7 @@ int main (int argc, char **argv) {
 
 		printf("AUTORITATIVNI\t%s\n", ((htons(header->guts) >> 10) & 1U) ? "ano" : "ne"); // AA bit set
 		printf("ZKRACENO\t%s\n", ((htons(header->guts) >> 9) & 1U) ? "ano" : "ne"); // TC bit set
-		printf("REKURZE\t%s\n", (((htons(header->guts) >> 7) & 1U) && ((htons(header->guts) >> 8) & 1U)) ? "ano" : "ne");
+		printf("REKURZE \t%s\n", (((htons(header->guts) >> 7) & 1U) && ((htons(header->guts) >> 8) & 1U)) ? "ano" : "ne");
 		// rekurzivni pouze v pripade, ze byla pozadovana rekurze a zaroven je nastavena rekurze dostupna na serveru
 	
 		printf("\n");

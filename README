@@ -1,0 +1,16 @@
+# DNS resolver - xplsek03
+
+## spusteni
+'''
+./dns --help  
+./dns [-x] [-r] [-6] -s dnsserver [-p port] adresa|url
+'''
+-x: rDNS  
+-6: AAAA dotaz  
+-r: rekurzivni  
+-p: port dns serveru  
+-s: dns server  
+--help: napoveda  
+
+## soubory
+Makefile, README, functions.h, functions.c, dnsresolver.c, test

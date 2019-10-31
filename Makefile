@@ -1,11 +1,9 @@
-CC=gcc 
-CFLAGS=-Wall
+CC=gcc
+CFLAGS=-I. -Werror -Wall -Wpedantic
 
-all: dns
-dns: dnsresolver.o
-dnsresolver.o: dnsresolver.c functions.h
+build: dnsresolver.c functions.c
+	$(CC) $(CFLAGS) dnsresolver.c functions.c functions.h -o dns
 
-#clean:
-#	rm -f dns dnsresolver.o
-#run: program
-#    ./program
+
+test:
+	./tests
