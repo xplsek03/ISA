@@ -6,4 +6,4 @@ build: dnsresolver.c functions.c
 
 
 test:
-	./tests
+	./tests.py

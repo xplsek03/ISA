@@ -19,16 +19,15 @@
 // over jestli se jedna o validni ip adresu
 // @ret true platna adresa
 // @ret false neplatna adresa
-bool validate_ip(char *ip, bool *v6) {
+bool validate_ip(char *ip, bool *v6, bool six_on) {
 	char buffer[16];
-	if(inet_pton(AF_INET, ip, buffer)) {// platna ipv4 adresa
+	if(!six_on && inet_pton(AF_INET, ip, buffer)) { // platna ipv4 adresa a zaroven nevyzadujeme ipv6
 		return true;
 	}
-	else if(inet_pton(AF_INET6, ip, buffer)) { // platna ipv6 adresa
-		*v6 = true; // pro odeslani nastavit socket na ipv6
+	else if(six_on && inet_pton(AF_INET6, ip, buffer)) { // platna ipv6 adresa a zaroven chceme ipv6
 		return true;
 	}
-	return false;
+	return false; // pokud zada jako server ipv4 a chce ipv6 nebo pokud zada server ipv6 a chce ipv4
 }
 
 // over zda se jedna o validni port
@@ -47,13 +46,18 @@ int validate_port(char *port) {
 
 // over domenove jmeno
 // funkce inspirovana z: http://man7.org/linux/man-pages/man3/getaddrinfo.3.html?fbclid=IwAR1nM16wJIbbV9qvZ6yES__aYIfzpN63QYpDA53Ce6t425TGtsAxvzpeu60
-void validate_hostname(char *hostname) {
+void validate_hostname(char *hostname, bool six_on) {
 
 	int sfd; // docket
     struct addrinfo hints, *infoptr, *rp;
     memset(&hints, 0, sizeof(hints));
 
-    hints.ai_family = AF_UNSPEC; // nespecifikovano jestli ipv4 nebo ipv6
+	if(six_on) { // -6
+    	hints.ai_family = AF_INET6;
+    }
+    else {
+    	hints.ai_family = AF_INET;
+    }
     hints.ai_socktype = SOCK_DGRAM;
     hints.ai_flags = 0;
     hints.ai_protocol = 0;
@@ -76,6 +80,7 @@ void validate_hostname(char *hostname) {
 			
         if (connect(sfd, rp->ai_addr, rp->ai_addrlen) != -1) { // podarilo se navazat spojeni s jednou z adres
             getnameinfo(rp->ai_addr, rp->ai_addrlen, ip, sizeof(ip), NULL, 0, NI_NUMERICHOST); // uloz adresu do bufferu
+            f = true; // adresa nalezena
             close(sfd); // zavri socket
 			break;
         }
@@ -99,7 +104,10 @@ void validate_string(char *url) {
 	if(strlen(url) < 3 || strlen(url) > 255) // nevyhovuje delka adresy
 		goto fail;
 
-	if(url[0] == '.' || url[0] == '-' || url[strlen(url)-1] == '.' || url[strlen(url)-1] == '-')
+	if(url[strlen(url)-1] == '.') // pokud je posledni znak tecka, nech ji zmizet
+		url[strlen(url)-1] = '\0';
+
+	if(url[0] == '.' || url[0] == '-' || url[strlen(url)-1] == '-')
 		goto fail; // vyrad adresy ktere zacinaji nebo konci spatnym znakem
 
 	int label_c = 0; // pocet znaku jednoho labelu
@@ -195,7 +203,7 @@ void parser(unsigned char *result, unsigned char* pos, unsigned char* dgram, int
         result[i]='.'; // pridej tecku
         i++; // prejdi na dalsi label
     }
-    result[i-1]='\0'; // smaz posledni tecku
+    //result[i-1]='\0'; // smaz posledni tecku
 }
 
 // vytiskni odpovedi na vystup
@@ -355,12 +363,12 @@ int print_answers(int cnt, int *size, unsigned char *dgram, int *pos, unsigned c
 // over jestli se jedna o validni ip adresu a zaroven ji preved do formatu na reverzni dotaz
 // @ret true validni
 // @ret false nevalidni
-bool revert_ip(char *ip) {
+bool revert_ip(char *ip, bool six_on) {
 	
 	struct sockaddr_in sa; // ipv4
 	struct in6_addr sa6; // ipv6
 
-	if(inet_pton(AF_INET, ip, &(sa.sin_addr))) { // validni ipv4 adresa
+	if(!six_on && inet_pton(AF_INET, ip, &(sa.sin_addr))) { // validni ipv4 adresa
 		int a,b,c,d;
 		sscanf(ip,"%d.%d.%d.%d",&a,&b,&c,&d);
 		sprintf(ip, "%d.%d.%d.%d", d, c, b, a);
@@ -368,7 +376,8 @@ bool revert_ip(char *ip) {
 		return true;
 	}
 	
-	if(inet_pton(AF_INET6, ip, &sa6)) { // validni ipv6 adresa
+	if(six_on && inet_pton(AF_INET6, ip, &sa6)) { // validni ipv6 adresa
+	
   		sprintf(ip,"%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
                  		(int)sa6.s6_addr[0], (int)sa6.s6_addr[1],
                  		(int)sa6.s6_addr[2], (int)sa6.s6_addr[3],

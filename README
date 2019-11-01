@@ -13,4 +13,12 @@
 --help: napoveda  
 
 ## soubory
-Makefile, README, functions.h, functions.c, dnsresolver.c, test
+Makefile  
+README  
+functions.h  
+functions.c  
+dnsresolver.c  
+tests.py  
+/tests/digs
+/tests/failed
+/tests/generated

@@ -1,8 +1,8 @@
 #include <stdbool.h>
 
-bool validate_ip(char *ip, bool *v6); // over ip adresu
+bool validate_ip(char *ip, bool *v6, bool six_on); // over ip adresu
 int validate_port(char *port); // over port
-void validate_hostname(char *hostname); // over server
+void validate_hostname(char *hostname, bool six_on); // over server
 void validate_string(char *url); // over dom. jmeno
 void dns_format(unsigned char* dns,char* host); // adresa->dns format
 void parser(unsigned char *result, unsigned char* pos, unsigned char* dgram, int* zarazka); // naparsuj libovolny retezec name z dns datagramu
@@ -32,5 +32,5 @@ typedef struct rr { // dns resource record
 } RR;
 #pragma pack(pop)
 
-bool revert_ip(char *ip); // adresa do rDNS formatu
+bool revert_ip(char *ip, bool six_on); // adresa do rDNS formatu
 int print_answers(int cnt, int *size, unsigned char *dgram, int *pos, unsigned char *position, unsigned char *content, char *cl, char *tp, char *typ); // tisk odpovedi na vystup

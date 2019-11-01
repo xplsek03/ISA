@@ -62,12 +62,15 @@ int main (int argc, char **argv) {
 					strcpy(p_val_str, optarg);
 					break;
 				case '?':
-					if (optopt == 'p' || optopt == 's') // chybejici hodnoty
+					if (optopt == 'p' || optopt == 's') { // chybejici hodnoty
 						fprintf (stderr, "U argumentu -%c chybi hodnota.\n", optopt);
-					else if (isprint (optopt)) // neni printable
+					}
+					else if (isprint (optopt)) { // neni printable
 						fprintf (stderr, "Neznamy argument: `-%c'.\n", optopt);
-					else // neznama moznost
+					}
+					else { // neznama moznost
 						fprintf (stderr,"Neznamy argument `\\x%x'.\n",optopt);
+					}
 					return 1;
 
 				default:
@@ -97,8 +100,9 @@ int main (int argc, char **argv) {
 		return 1;
 	}
 
-	if(x_on) {// zapnuty reverzni dotaz
-		if(!revert_ip(ip_val)) { // zvaliduj jestli je to IP adresa a zaroven ji revertuj kvuli rDNS
+	if(x_on) { // zapnuty reverzni dotaz
+	
+		if(!revert_ip(ip_val, six_on)) { // zvaliduj jestli je to IP adresa a zaroven ji revertuj kvuli rDNS
             fprintf(stderr, "Dotazovana adresa neni IP adresou.\n");
             return 1;
 		}
@@ -113,15 +117,20 @@ int main (int argc, char **argv) {
         return 1;
     }
     
-	if(!validate_ip(s_val, &v6)) { // zadany server neni platna ip adresa
-		validate_hostname(s_val); // vrat funkcni ip adresu z domenoveho jmena a nahrad za puvodni hostname
+    if(six_on) { // je pozadovan dotaz IPv6
+    	v6 = true; // je potreba odeslat AAAA dotaz pres IPv6, jestli je to mozne se ukaze pri odesilani
+    }
+    
+	if(!validate_ip(s_val, &v6, six_on)) { // zadany server neni platna ip adresa
+	
+		validate_hostname(s_val, six_on); // vrat funkcni ip adresu z domenoveho jmena a nahrad za puvodni hostname
 
 		if(!strlen(s_val)) { // nenaslo to zadnou adresu, ktera by se dala pouzit
 			fprintf (stderr,"Nepodarilo se pripojit k zadne IP adrese zadaneho dns serveru.\n");
 			return 1;
 		}
 		
-		validate_ip(s_val, &v6); // po nalezeni ip adresy nastav jestli se jedna o ipv4 nebo ipv6
+		// validate_ip(s_val, &v6, six_on); // po nalezeni ip adresy nastav jestli se jedna o ipv4 nebo ipv6. NENI POTREBA
 	}
 
 	// ******** PLNENI DATAGRAMU *********
@@ -183,6 +192,7 @@ int main (int argc, char **argv) {
 		timeout.tv_sec = 5; // nastav timeout na 5s, kdyby neprisla odpoved 
 		if (setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
 			perror("Setsockopt error.\n");
+			return 1;
 		}
 		
 		if(sendto(s, dgram, size, 0, (struct sockaddr*)&dest, sizeof(dest)) < 0) { // odeslani datagramu
@@ -192,6 +202,7 @@ int main (int argc, char **argv) {
 		int incoming = sizeof(dest);
 		if(recvfrom(s,dgram, 65536 , 0, (struct sockaddr*)&dest, (socklen_t*)&incoming) < 0) { // cekani na data
 			perror("Chyba pri prijimani dat.\n");
+			return 1;
 		}
 	}
 	else { // IPv4
@@ -210,6 +221,7 @@ int main (int argc, char **argv) {
 		timeout.tv_sec = 5; // nastav timeout na 5s, kdyby neprisla odpoved 
 		if (setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
 			perror("Setsockopt error.\n");
+			return 1;
 		}
 		
 		if(sendto(s, dgram, size, 0, (struct sockaddr*)&dest, sizeof(dest)) < 0) { // odeslani datagramu
@@ -219,6 +231,7 @@ int main (int argc, char **argv) {
 		int incoming = sizeof(dest);
 		if(recvfrom(s,dgram, 65536 , 0, (struct sockaddr*)&dest, (socklen_t*)&incoming) < 0) { // cekani na data
 			perror("Chyba pri prijimani dat.\n");
+			return 1;
 		}
 	}
     
@@ -339,11 +352,13 @@ int main (int argc, char **argv) {
 				return 1; // neco bylo spatne naformatovane		
 
 			if(print_answers(ntohs(header->aucount), &size, dgram, &pos, position, content, cl, tp, "AUTHORITATIVE ANSWERS"))
-				return 1; // neco bylo spatne naformatovane		
+				return 1; // neco bylo spatne naformatovane
 
 			if(print_answers(ntohs(header->addcount), &size, dgram, &pos, position, content, cl, tp, "ADDITIONAL ANSWERS"))
 				return 1; // neco bylo spatne naformatovane					
 		}
+		
+		
 			
 		else { // pokud neobsahuje question nebo jich obsahuje vic
 			fprintf(stderr,"Datagram neobsahuje dotaz nebo je vic nez 1.\n");
