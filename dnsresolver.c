@@ -7,7 +7,15 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <string.h>
 #include <sys/time.h>
+#include <netdb.h>
+// freebsd
+#include <netinet/in.h>
+#include <ifaddrs.h>
+#include <net/if.h>
 
 #include "functions.h" // kvuli strukture
 
@@ -102,8 +110,8 @@ int main (int argc, char **argv) {
 
 	if(x_on) { // zapnuty reverzni dotaz
 	
-		if(!revert_ip(ip_val, six_on)) { // zvaliduj jestli je to IP adresa a zaroven ji revertuj kvuli rDNS
-            fprintf(stderr, "Dotazovana adresa neni IP adresou.\n");
+		if(!revert_ip(ip_val)) { // zvaliduj jestli je to IP adresa a zaroven ji revertuj kvuli rDNS
+            fprintf(stderr, "Dotazovana adresa neni IP adresou nebo je nespravneho typu.\n");
             return 1;
 		}
 	}

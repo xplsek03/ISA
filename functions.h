@@ -32,5 +32,5 @@ typedef struct rr { // dns resource record
 } RR;
 #pragma pack(pop)
 
-bool revert_ip(char *ip, bool six_on); // adresa do rDNS formatu
+bool revert_ip(char *ip); // adresa do rDNS formatu
 int print_answers(int cnt, int *size, unsigned char *dgram, int *pos, unsigned char *position, unsigned char *content, char *cl, char *tp, char *typ); // tisk odpovedi na vystup

@@ -19,20 +19,19 @@ passed = open("tests/passed", "w+")
 
 # DATA PRO SPOUSTENI TESTU
 data = [
-        ["kazi.fit.vutbr.cz","one.one.one.one"],
-        ["147.229.8.12","8.8.8.8","1.1.1.1"],
-        ["2606:4700:4700::1111","2606:4700:4700::1001"],
-        ["-1goog.","444.cz","11.111.1.cz","seznam.cz"],
-        ["1.1.1","45.67.77.89","11.11.11.11"],
-        ["2001:0db8:85a3:0000:0000:8a2e:0370:7334","2001:0db8:85a3:00GG:0000:8a2e:0370:7334","200:0db8:85a3:0000:0000:8a2e0370:7334"]
+        {'okh': ["kazi.fit.vutbr.cz","one.one.one.one"]},
+        {'ok4': ["147.229.8.12","8.8.8.8","1.1.1.1"]},
+        {'ok6': ["2606:4700:4700::1111","2606:4700:4700::1001"]},
+        {'badh': ["1goog.",".cz..","-------",".2fefddf--ee"]},
+        {'bad4': ["1.1.1","55.55.55..","257.34.34.34"]},
+        {'bad6': ["2001:0db8:85a3:0000:0000:8a2e:0370:7334","2001:0db8:85a3:00GG:0000:8a2e:0370:7334","200:0db8:85a3:0000:0000:8a2e0370:7334"]}
         ]
+shuffle(data) # promichej data adres a serveru
 
 # VYGENERUJ GENEROVANI TESTU
 list_a = list(range(6))
-shuffle(list_a)
 list_a.insert(0,'a')
 list_s = list(range(6))
-shuffle(list_s)
 list_s.insert(0,'s')
 list_r = list(range(2))
 shuffle(list_r)
@@ -61,17 +60,15 @@ six = recognize(rndm_list, 'six')
 # GENEROVANI TESTU
 for combo in itertools.product(*rndm_list):
     print('testova kombinace: ' ,combo)
-    #print('combo s: ' ,combo[s])
-    #print('combo r: ' ,combo[r])
-    #print('combo p: ' ,combo[p])
-    #print('combo x: ' ,combo[x])
-    #print('combo a: ' ,combo[a])
-    #print('combo six: ' ,combo[six])
 
     # VYTVORENI KONFIGURACE SPUSTENI XPLSEK03 DNS
     port = str(randrange(1,65535)) # sdileni port mezi dns a digem
-    srand = randrange(0,len(data[combo[s]])-1) # sdileny dns server
-    arand = randrange(0,len(data[combo[a]])-1) # sdilena hledana ip/domena
+    
+    srand = randrange(0,sum(len(v) for v in data[combo[s]].values())-1) # sdileny dns server
+    arand = randrange(0,sum(len(v) for v in data[combo[a]].values())-1) # sdilena hledana ip/domena
+    
+    # srand = ktery konkretni server z jednoho ze slovniku, vybranych nahodne s[2] napr. (0 = 2606:4700:4700::1111)
+    # arand totez
     
     dns = "./dns"
     dns += " -6" if combo[six] else "" 
@@ -82,22 +79,35 @@ for combo in itertools.product(*rndm_list):
         dns += " -p " + port
     dns += " -r" if combo[r] else ""
     dns += " -s "
-    dns += data[combo[s]][srand]
+    
+    dns += list(data[combo[s]].values())[0][srand]
     dns += " "
-    dns += data[combo[a]][arand]
+    dns += list(data[combo[a]].values())[0][arand]
     
     # ZNAME PODMINKY RETURN KODU U XPLSEK03 DNS
     expected_return = 0 # defualtne uspech
-    # bad ip/host server, -x a -6 zaraz, bad ip/host adresa,pozadovana adresa neni platne dom jmeno, -x a neco jineho nez ip, chybny port
-    if ((combo[s] > 2) or (combo[x] and combo[six]) or (combo[a] > 2) or (not combo[x] and combo[a]) or (combo[x] and combo[a]==0) or (combo[p] == 2)): # chybove podminky                                
-        expected_return = 1
+    # bad ip/host server, bad ip/host adresa,pozadovana adresa neni platne dom jmeno, -x a neco jineho nez ip, chybny port
+    if (
+        list(data[combo[s]].keys()) == ['badh'] or list(data[combo[s]].keys()) == ['bad4'] or list(data[combo[s]].keys()) == ['bad6'] or 
+        list(data[combo[a]].keys()) == ['badh'] or list(data[combo[a]].keys()) == ['bad4'] or list(data[combo[a]].keys()) == ['bad6'] or 
+        (not combo[x] and list(data[combo[a]].keys()) != ['okh']) or 
+        (combo[x] and list(data[combo[a]].keys()) == ['okh']) or 
+        (combo[p] == 2 and port != 53)
+        ): # chybove podminky                                
+        expected_return = 1 # ocekavame chybu
         
     # SPUST DNS XPLSEK03 RESOLVER A PROZKOUMEJ NAVRATOVY KOD
-    proc = subprocess.Popen(dns, stdout=subprocess.PIPE, shell=True)
-    (dns_output, dns_err) = proc.communicate()
- 
-    dns_rc = proc.wait()
-
+    
+    # kvuli problemum s pripojenim k dns serverum ktere obcas nastanou se test v pripade neuspechu jeste 4x zopakuje s nejakym malym cekanim
+    for i in range(5):
+        proc = subprocess.Popen(dns, stdout=subprocess.PIPE, shell=True)
+        (dns_output, dns_err) = proc.communicate()
+        dns_rc = proc.wait()
+        if dns_rc: # vratila se chyba, pocke a zopakuj
+            time.sleep(.250)
+        else: # odpoved prisla, stop
+            break
+            
     generated.write(dns + '\n')
     
     # POROVNEJ RETURN CODE
@@ -105,11 +115,9 @@ for combo in itertools.product(*rndm_list):
     # ze pokud uzivatel zada volbu -6 tak se neprovede poslani A dotazu ani kdyby to slo udelat. Dig 9.11 v mem ubuntu misto toho defualtne odesle -4 dotaz, pokud to jde.
     # z toho duvodu je dale podminka: NOT DNS_RC. Tzn testujeme dig az v pripade, ze test prosel (tim padem se omezi chybne vstupy do digu co by v nem mohly vratit 0 (echo $?)) 
     if expected_return != dns_rc: # test nesplnil podminky
-        failed.write(("[ipv6] " if combo[s]==2 else "") + dns + '\t\tRC: ' + str(dns_rc) + '\t\tEXPECTED: ' + str(expected_return) + '\n')
+        failed.write(("[ipv6] " if (list(data[combo[s]].keys()) == ['ok6'] or combo[six]) else "") + dns + '\t\tRC: ' + str(dns_rc) + '\t\tEXPECTED: ' + str(expected_return) + '\n')
     
     elif not dns_rc: # test podminky splnil a zaroven vratil 0, dal otestuj jestli ma podobny vstup jako DIG
-        
-        time.sleep(.500) # pockej chvili
                                 
         #VYTVORENI KONFIGURACE SPUSTENI DIG
         dig = "dig"
@@ -117,23 +125,24 @@ for combo in itertools.product(*rndm_list):
             dig += " -x"
         if not combo[r]:
             dig += " +norecurse"
-        if combo[p] == 1:
-            dig += " -p 53"
-        elif combo[p] == 2:
-            dig += " -p " + port
         if combo[six]:
             dig += " -6"
         dig += " @"
-        dig += data[combo[s]][srand]
+        dig += list(data[combo[s]].values())[0][srand]
         dig += " "
-        dig += data[combo[a]][arand]
+        dig += list(data[combo[a]].values())[0][arand]
         
         
         # SPUST DIG A ZACNI POROVNAVAT VYSTUP
-        proc = subprocess.Popen(dig, stdout=subprocess.PIPE, shell=True)
-        (dig_output, dig_err) = proc.communicate()
- 
-        dig_rc = proc.wait()
+        # pro jistotu proved vickrat kdyby se nepripojil napoprve
+        for i in range(5):
+            proc = subprocess.Popen(dig, stderr=None, stdout=subprocess.PIPE, shell=True)
+            (dig_output, dig_err) = proc.communicate()
+            dig_rc = proc.wait()
+            if dig_rc:
+                time.sleep(.250)
+            else:
+                break
         
         # POROVNEJ RC DNS A DIG
         if (dig_rc and not dns_rc) or (not dig_rc and dns_rc): # pokud jeden z nich skoncil neuspechem a ten druhy ne, dej test do failed a oznac ho
@@ -156,11 +165,14 @@ for combo in itertools.product(*rndm_list):
                 for line in dig_output.decode('utf-8').split('\n'): # najdi question z digu
                     
                     if start_q:
-                        dig_q = line.split('\t')
-                        if len(dig_q) != 3:
+                        dig_q = line.split() # odstran whitespaces
+                            
+                        if len(dig_q) != 4:                          
                             failed.write('[dig malformatted output] ' + dns + '\n')
-                            break                            
-                        dig_q[1].pop(0) # zbav se stredniku, buhviproc tam je
+                            break     
+                        
+                        dig_q[0] = dig_q[0][1:] # zbav se stredniku, buhviproc tam je
+                        dig_q.pop(1) # zbav se zasupneho ttl ' ' znaku
                         if dig_q != dns_q:
                             failed.write('[different questions] ' + dns + '\n')
                             err = True
@@ -178,7 +190,12 @@ for combo in itertools.product(*rndm_list):
                 continue
             
         if not err: # questions porovnany, pokracuj porovnanim answers
-            passed.write(dns + '\n')
+            passed.write('[RC: 0] ' + dns + '\n')
+
+    # konec testovani uspesneho testu
+
+    else: # test mel skoncit neuspechem
+        passed.write('[RC: 1] ' + dns + '\n')        
         
         # KONEC JEDNOHO TESTU
 

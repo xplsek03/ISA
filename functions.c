@@ -10,6 +10,10 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
+// freebsd
+#include <netinet/in.h>
+#include <ifaddrs.h>
+#include <net/if.h>
 
 // struktura RR
 #ifndef FUNCTIONS_H
@@ -363,12 +367,12 @@ int print_answers(int cnt, int *size, unsigned char *dgram, int *pos, unsigned c
 // over jestli se jedna o validni ip adresu a zaroven ji preved do formatu na reverzni dotaz
 // @ret true validni
 // @ret false nevalidni
-bool revert_ip(char *ip, bool six_on) {
+bool revert_ip(char *ip) {
 	
 	struct sockaddr_in sa; // ipv4
 	struct in6_addr sa6; // ipv6
 
-	if(!six_on && inet_pton(AF_INET, ip, &(sa.sin_addr))) { // validni ipv4 adresa
+	if(inet_pton(AF_INET, ip, &(sa.sin_addr))) { // validni ipv4 adresa
 		int a,b,c,d;
 		sscanf(ip,"%d.%d.%d.%d",&a,&b,&c,&d);
 		sprintf(ip, "%d.%d.%d.%d", d, c, b, a);
@@ -376,7 +380,7 @@ bool revert_ip(char *ip, bool six_on) {
 		return true;
 	}
 	
-	if(six_on && inet_pton(AF_INET6, ip, &sa6)) { // validni ipv6 adresa
+	if(inet_pton(AF_INET6, ip, &sa6)) { // validni ipv6 adresa
 	
   		sprintf(ip,"%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
                  		(int)sa6.s6_addr[0], (int)sa6.s6_addr[1],

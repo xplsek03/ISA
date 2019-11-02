@@ -1,0 +1,118 @@
+[RC: 1] ./dns -x -p 5195 -r -s .cz.. .cz..
+[RC: 1] ./dns -6 -x -p 25250 -r -s ------- 1goog.
+[RC: 1] ./dns -x -p 7434 -s 1goog. -------
+[RC: 1] ./dns -6 -x -p 64910 -s ------- .cz..
+[RC: 1] ./dns -x -p 64189 -r -s ------- 55.55.55..
+[RC: 1] ./dns -6 -x -p 18349 -r -s .cz.. 1.1.1
+[RC: 1] ./dns -x -p 32001 -s ------- 55.55.55..
+[RC: 1] ./dns -6 -x -p 54847 -s 1goog. 1.1.1
+[RC: 1] ./dns -x -p 42517 -r -s ------- 147.229.8.12
+[RC: 1] ./dns -6 -x -p 64659 -r -s ------- 147.229.8.12
+[RC: 1] ./dns -x -p 45349 -s 1goog. 147.229.8.12
+[RC: 1] ./dns -6 -x -p 13470 -s 1goog. 8.8.8.8
+[RC: 1] ./dns -x -p 63438 -r -s .cz.. 2001:0db8:85a3:00GG:0000:8a2e:0370:7334
+[RC: 1] ./dns -6 -x -p 3185 -r -s .cz.. 2001:0db8:85a3:0000:0000:8a2e:0370:7334
+[RC: 1] ./dns -x -p 11800 -s .cz.. 2001:0db8:85a3:0000:0000:8a2e:0370:7334
+[RC: 1] ./dns -6 -x -p 42204 -s .cz.. 2001:0db8:85a3:00GG:0000:8a2e:0370:7334
+[RC: 1] ./dns -x -p 26923 -r -s 1goog. 2606:4700:4700::1111
+[RC: 1] ./dns -6 -x -p 52582 -r -s .cz.. 2606:4700:4700::1111
+[RC: 1] ./dns -x -p 2877 -s ------- 2606:4700:4700::1111
+[RC: 1] ./dns -6 -x -p 58162 -s ------- 2606:4700:4700::1111
+[RC: 1] ./dns -x -p 23295 -r -s .cz.. kazi.fit.vutbr.cz
+[RC: 1] ./dns -6 -x -p 58535 -r -s ------- kazi.fit.vutbr.cz
+[RC: 1] ./dns -x -p 1158 -s .cz.. kazi.fit.vutbr.cz
+[RC: 1] ./dns -6 -x -p 26289 -s .cz.. kazi.fit.vutbr.cz
+[RC: 1] ./dns -x -r -s .cz.. 1goog.
+[RC: 1] ./dns -6 -x -r -s 1goog. .cz..
+[RC: 1] ./dns -x -s 1goog. -------
+[RC: 1] ./dns -6 -x -s 1goog. 1goog.
+[RC: 1] ./dns -x -r -s ------- 55.55.55..
+[RC: 1] ./dns -6 -x -r -s ------- 1.1.1
+[RC: 1] ./dns -x -s 1goog. 55.55.55..
+[RC: 1] ./dns -6 -x -s ------- 55.55.55..
+[RC: 1] ./dns -x -r -s .cz.. 147.229.8.12
+[RC: 1] ./dns -6 -x -r -s 1goog. 8.8.8.8
+[RC: 1] ./dns -x -s ------- 8.8.8.8
+[RC: 1] ./dns -6 -x -s 1goog. 8.8.8.8
+[RC: 1] ./dns -x -r -s ------- 2001:0db8:85a3:00GG:0000:8a2e:0370:7334
+[RC: 1] ./dns -6 -x -r -s 1goog. 2001:0db8:85a3:00GG:0000:8a2e:0370:7334
+[RC: 1] ./dns -x -s .cz.. 2001:0db8:85a3:00GG:0000:8a2e:0370:7334
+[RC: 1] ./dns -6 -x -s .cz.. 2001:0db8:85a3:0000:0000:8a2e:0370:7334
+[RC: 1] ./dns -x -r -s .cz.. 2606:4700:4700::1111
+[RC: 1] ./dns -6 -x -r -s 1goog. 2606:4700:4700::1111
+[RC: 1] ./dns -x -s ------- 2606:4700:4700::1111
+[RC: 1] ./dns -6 -x -s 1goog. 2606:4700:4700::1111
+[RC: 1] ./dns -x -r -s 1goog. kazi.fit.vutbr.cz
+[RC: 1] ./dns -6 -x -r -s .cz.. kazi.fit.vutbr.cz
+[RC: 1] ./dns -x -s 1goog. kazi.fit.vutbr.cz
+[RC: 1] ./dns -6 -x -s .cz.. kazi.fit.vutbr.cz
+[RC: 1] ./dns -x -p 53 -r -s ------- .cz..
+[RC: 1] ./dns -6 -x -p 53 -r -s .cz.. -------
+[RC: 1] ./dns -x -p 53 -s 1goog. -------
+[RC: 1] ./dns -6 -x -p 53 -s .cz.. .cz..
+[RC: 1] ./dns -x -p 53 -r -s 1goog. 1.1.1
+[RC: 1] ./dns -6 -x -p 53 -r -s .cz.. 1.1.1
+[RC: 1] ./dns -x -p 53 -s .cz.. 55.55.55..
+[RC: 1] ./dns -6 -x -p 53 -s ------- 1.1.1
+[RC: 1] ./dns -x -p 53 -r -s 1goog. 8.8.8.8
+[RC: 1] ./dns -6 -x -p 53 -r -s .cz.. 8.8.8.8
+[RC: 1] ./dns -x -p 53 -s 1goog. 147.229.8.12
+[RC: 1] ./dns -6 -x -p 53 -s ------- 8.8.8.8
+[RC: 1] ./dns -x -p 53 -r -s .cz.. 2001:0db8:85a3:00GG:0000:8a2e:0370:7334
+[RC: 1] ./dns -6 -x -p 53 -r -s 1goog. 2001:0db8:85a3:00GG:0000:8a2e:0370:7334
+[RC: 1] ./dns -x -p 53 -s ------- 2001:0db8:85a3:00GG:0000:8a2e:0370:7334
+[RC: 1] ./dns -6 -x -p 53 -s .cz.. 2001:0db8:85a3:0000:0000:8a2e:0370:7334
+[RC: 1] ./dns -x -p 53 -r -s ------- 2606:4700:4700::1111
+[RC: 1] ./dns -6 -x -p 53 -r -s 1goog. 2606:4700:4700::1111
+[RC: 1] ./dns -x -p 53 -s 1goog. 2606:4700:4700::1111
+[RC: 1] ./dns -6 -x -p 53 -s .cz.. 2606:4700:4700::1111
+[RC: 1] ./dns -x -p 53 -r -s 1goog. kazi.fit.vutbr.cz
+[RC: 1] ./dns -6 -x -p 53 -r -s .cz.. kazi.fit.vutbr.cz
+[RC: 1] ./dns -x -p 53 -s ------- kazi.fit.vutbr.cz
+[RC: 1] ./dns -6 -x -p 53 -s .cz.. kazi.fit.vutbr.cz
+[RC: 1] ./dns -p 3636 -r -s 1goog. .cz..
+[RC: 1] ./dns -6 -p 10870 -r -s .cz.. .cz..
+[RC: 1] ./dns -p 16871 -s ------- -------
+[RC: 1] ./dns -6 -p 12920 -s 1goog. 1goog.
+[RC: 1] ./dns -p 3483 -r -s ------- 55.55.55..
+[RC: 1] ./dns -6 -p 31645 -r -s 1goog. 55.55.55..
+[RC: 1] ./dns -p 16625 -s 1goog. 1.1.1
+[RC: 1] ./dns -6 -p 24554 -s .cz.. 55.55.55..
+[RC: 1] ./dns -p 47372 -r -s .cz.. 8.8.8.8
+[RC: 1] ./dns -6 -p 3236 -r -s ------- 147.229.8.12
+[RC: 1] ./dns -p 2896 -s ------- 147.229.8.12
+[RC: 1] ./dns -6 -p 52295 -s .cz.. 8.8.8.8
+[RC: 1] ./dns -p 33185 -r -s .cz.. 2001:0db8:85a3:00GG:0000:8a2e:0370:7334
+[RC: 1] ./dns -6 -p 39837 -r -s ------- 2001:0db8:85a3:00GG:0000:8a2e:0370:7334
+[RC: 1] ./dns -p 58729 -s 1goog. 2001:0db8:85a3:00GG:0000:8a2e:0370:7334
+[RC: 1] ./dns -6 -p 15134 -s 1goog. 2001:0db8:85a3:0000:0000:8a2e:0370:7334
+[RC: 1] ./dns -p 49891 -r -s ------- 2606:4700:4700::1111
+[RC: 1] ./dns -6 -p 22049 -r -s .cz.. 2606:4700:4700::1111
+[RC: 1] ./dns -p 51975 -s .cz.. 2606:4700:4700::1111
+[RC: 1] ./dns -6 -p 58156 -s 1goog. 2606:4700:4700::1111
+[RC: 1] ./dns -p 40102 -r -s ------- kazi.fit.vutbr.cz
+[RC: 1] ./dns -6 -p 63048 -r -s ------- kazi.fit.vutbr.cz
+[RC: 1] ./dns -p 50264 -s 1goog. kazi.fit.vutbr.cz
+[RC: 1] ./dns -6 -p 39166 -s .cz.. kazi.fit.vutbr.cz
+[RC: 1] ./dns -r -s ------- -------
+[RC: 1] ./dns -6 -r -s 1goog. .cz..
+[RC: 1] ./dns -s 1goog. -------
+[RC: 1] ./dns -6 -s .cz.. 1goog.
+[RC: 1] ./dns -r -s 1goog. 55.55.55..
+[RC: 1] ./dns -6 -r -s 1goog. 55.55.55..
+[RC: 1] ./dns -s .cz.. 1.1.1
+[RC: 1] ./dns -6 -s ------- 55.55.55..
+[RC: 1] ./dns -r -s .cz.. 8.8.8.8
+[RC: 1] ./dns -6 -r -s 1goog. 8.8.8.8
+[RC: 1] ./dns -s ------- 147.229.8.12
+[RC: 1] ./dns -6 -s 1goog. 147.229.8.12
+[RC: 1] ./dns -r -s 1goog. 2001:0db8:85a3:00GG:0000:8a2e:0370:7334
+[RC: 1] ./dns -6 -r -s .cz.. 2001:0db8:85a3:00GG:0000:8a2e:0370:7334
+[RC: 1] ./dns -s 1goog. 2001:0db8:85a3:00GG:0000:8a2e:0370:7334
+[RC: 1] ./dns -6 -s ------- 2001:0db8:85a3:00GG:0000:8a2e:0370:7334
+[RC: 1] ./dns -r -s 1goog. 2606:4700:4700::1111
+[RC: 1] ./dns -6 -r -s 1goog. 2606:4700:4700::1111
+[RC: 1] ./dns -s ------- 2606:4700:4700::1111
+[RC: 1] ./dns -6 -s .cz.. 2606:4700:4700::1111
+[RC: 1] ./dns -r -s 1goog. kazi.fit.vutbr.cz
+[RC: 1] ./dns -6 -r -s 1goog. kazi.fit.vutbr.cz
