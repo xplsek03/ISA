@@ -10,11 +10,11 @@ def recognize(lst, char): # rozpoznani typu vnitrniho seznamu v hlavnim seznamu
         if item[0] == char:
             item.pop(0) # odstran vlozeny typ
             return i
-        i = i + 1
+        i = i + 1 # zvys index
 
 # SOUBORY S TESTOVYMI VYSTUPY
 failed = open("tests/failed","w+")
-generated = open("tests/generated","w+")
+generated = open("tests/generated","w+") # vsechny testy
 passed = open("tests/passed", "w+")
 
 # DATA PRO SPOUSTENI TESTU
@@ -62,13 +62,11 @@ for combo in itertools.product(*rndm_list):
     print('testova kombinace: ' ,combo)
 
     # VYTVORENI KONFIGURACE SPUSTENI XPLSEK03 DNS
-    port = str(randrange(1,65535)) # sdileni port mezi dns a digem
-    
+    port = str(randrange(0,65535)) # sdileni port mezi dns a digem
     srand = randrange(0,sum(len(v) for v in data[combo[s]].values())-1) # sdileny dns server
     arand = randrange(0,sum(len(v) for v in data[combo[a]].values())-1) # sdilena hledana ip/domena
-    
-    # srand = ktery konkretni server z jednoho ze slovniku, vybranych nahodne s[2] napr. (0 = 2606:4700:4700::1111)
-    # arand totez
+    # srand = ktery konkretni server z jednoho ze slovniku, vybranych nahodne (s[2] treba) napr. (0 = 2606:4700:4700::1111)
+    # arand totez, akorat pro adresy
     
     dns = "./dns"
     dns += " -6" if combo[six] else "" 
@@ -98,105 +96,109 @@ for combo in itertools.product(*rndm_list):
         
     # SPUST DNS XPLSEK03 RESOLVER A PROZKOUMEJ NAVRATOVY KOD
     
-    # kvuli problemum s pripojenim k dns serverum ktere obcas nastanou se test v pripade neuspechu jeste 4x zopakuje s nejakym malym cekanim
-    for i in range(5):
+    # kvuli problemum s pripojenim k dns serverum ktere obcas nastanou se test v pripade neuspechu jeste 2x zopakuje s nejakym malym cekanim
+    for i in range(3):
         proc = subprocess.Popen(dns, stdout=subprocess.PIPE, shell=True)
         (dns_output, dns_err) = proc.communicate()
         dns_rc = proc.wait()
-        if dns_rc: # vratila se chyba, pocke a zopakuj
+        if dns_rc == 2: # vratila se sitova chyba, pockej a zopakuj
             time.sleep(.250)
         else: # odpoved prisla, stop
             break
             
     generated.write(dns + '\n')
-    
+
+    if expected_return: # mela vyjit chyba
+        if not dns_rc: # nevysla chyba
+            failed.write(("[ipv6] " if (list(data[combo[s]].keys()) == ['ok6'] or combo[six]) else "") + dns + '\t\tRC: ' + str(dns_rc) + '\t\tEXPECTED: ' + '1+' if expected_return > 0 else '0'  + '\n')
+        else: # test mel skoncit neuspechem
+            passed.write('[RC: 1+] ' + dns + '\n')  
+    else: # nemela vyjit chyba
+        if dns_rc: # vysla chyba
+            failed.write(("[ipv6] " if (list(data[combo[s]].keys()) == ['ok6'] or combo[six]) else "") + dns + '\t\tRC: ' + str(dns_rc) + '\t\tEXPECTED: ' + '1+' if expected_return > 0 else '0'  + '\n')          
+        else: # test mel skoncit uspechem
+            passed.write('[RC: 0] ' + dns + '\n')  
+
+    # EDIT: ukazalo se ze digu se neda verit, alespon na mem ubuntu ne. Validaci zatim rusim a budu spolehat na spravnost defaultnich vystupu.
     # POROVNEJ RETURN CODE
     # dig je docela svine. Vraci navratovy kod 0 i kdyz vstup uplne nedava smysl (nekdy i u nevalidnich ipv6 domen apod.). Priklad: muj dns resolver ma celkem striktni podminku, 
     # ze pokud uzivatel zada volbu -6 tak se neprovede poslani A dotazu ani kdyby to slo udelat. Dig 9.11 v mem ubuntu misto toho defualtne odesle -4 dotaz, pokud to jde.
     # z toho duvodu je dale podminka: NOT DNS_RC. Tzn testujeme dig az v pripade, ze test prosel (tim padem se omezi chybne vstupy do digu co by v nem mohly vratit 0 (echo $?)) 
-    if expected_return != dns_rc: # test nesplnil podminky
-        failed.write(("[ipv6] " if (list(data[combo[s]].keys()) == ['ok6'] or combo[six]) else "") + dns + '\t\tRC: ' + str(dns_rc) + '\t\tEXPECTED: ' + str(expected_return) + '\n')
     
-    elif not dns_rc: # test podminky splnil a zaroven vratil 0, dal otestuj jestli ma podobny vstup jako DIG
+#    if not dns_rc: # test podminky splnil a zaroven vratil 0, dal otestuj jestli ma podobny vstup jako DIG
                                 
         #VYTVORENI KONFIGURACE SPUSTENI DIG
-        dig = "dig"
-        if combo[x]:
-            dig += " -x"
-        if not combo[r]:
-            dig += " +norecurse"
-        if combo[six]:
-            dig += " -6"
-        dig += " @"
-        dig += list(data[combo[s]].values())[0][srand]
-        dig += " "
-        dig += list(data[combo[a]].values())[0][arand]
-        
-        
+#        dig = "dig"
+#        if combo[x]:
+#            dig += " -x"
+#        if not combo[r]:
+#            dig += " +norecurse"
+#        if combo[six]:
+#            dig += " -6"
+#        dig += " @"
+#        dig += list(data[combo[s]].values())[0][srand]
+#        dig += " "
+#        dig += list(data[combo[a]].values())[0][arand]
+                
         # SPUST DIG A ZACNI POROVNAVAT VYSTUP
         # pro jistotu proved vickrat kdyby se nepripojil napoprve
-        for i in range(5):
-            proc = subprocess.Popen(dig, stderr=None, stdout=subprocess.PIPE, shell=True)
-            (dig_output, dig_err) = proc.communicate()
-            dig_rc = proc.wait()
-            if dig_rc:
-                time.sleep(.250)
-            else:
-                break
+#        for i in range(3):
+#           proc = subprocess.Popen(dig, stderr=None, stdout=subprocess.PIPE, shell=True)
+#           (dig_output, dig_err) = proc.communicate()
+#          dig_rc = proc.wait()
+#            if dig_rc:
+#                time.sleep(.250)
+#            else:
+#                break
         
         # POROVNEJ RC DNS A DIG
-        if (dig_rc and not dns_rc) or (not dig_rc and dns_rc): # pokud jeden z nich skoncil neuspechem a ten druhy ne, dej test do failed a oznac ho
-            failed.write('[opposite RC] ' + dns + '\n')
-            continue
+#        if (dig_rc and not dns_rc) or (not dig_rc and dns_rc): # pokud jeden z nich skoncil neuspechem a ten druhy ne, dej test do failed a oznac ho
+#            failed.write('[opposite RC] ' + dns + '\n')
+#            continue
             
         # NAJDI NALEZENE VSECHNY NALEZENE ZAZNAMY DNS A ZKONTROLUJ JESTLI JE NASEL I DIG        
-        start_q = False
-        err = False
+#        start_q = False
+#        err = False
         
-        for line in dns_output.decode('utf-8').split('\n'): # porovnej question
+#        for line in dns_output.decode('utf-8').split('\n'): # porovnej question
 
-            if start_q:
-                start_q = False
-                dns_q = line.split('\t') # naparsuj question
-                if len(dns_q) != 3: # neco je spatne v dns xplsek03 vypisu question
-                    failed.write('[dns malformatted output] ' + dns + '\n')
-                    break
+#            if start_q:
+#                start_q = False
+#               dns_q = line.split('\t') # naparsuj question
+#                if len(dns_q) != 3: # neco je spatne v dns xplsek03 vypisu question
+#                    failed.write('[dns malformatted output] ' + dns + '\n')
+#                    break
                 
-                for line in dig_output.decode('utf-8').split('\n'): # najdi question z digu
+#                for line in dig_output.decode('utf-8').split('\n'): # najdi question z digu
                     
-                    if start_q:
-                        dig_q = line.split() # odstran whitespaces
-                            
-                        if len(dig_q) != 4:                          
-                            failed.write('[dig malformatted output] ' + dns + '\n')
-                            break     
+#                    if start_q:
+#                        dig_q = line.split() # odstran whitespaces
+#                            
+#                        if len(dig_q) != 4:                          
+#                            failed.write('[dig malformatted output] ' + dns + '\n')
+#                            break     
+#                        
+#                        dig_q[0] = dig_q[0][1:] # zbav se stredniku, buhviproc tam je
+#                        dig_q.pop(1) # zbav se zasupneho ttl ' ' znaku
+#                        if dig_q != dns_q:
+#                            failed.write('[different questions] ' + dns + '\n')
+#                            err = True
+#                            break
+#                        else:
+#                            err = False
+#                            break
                         
-                        dig_q[0] = dig_q[0][1:] # zbav se stredniku, buhviproc tam je
-                        dig_q.pop(1) # zbav se zasupneho ttl ' ' znaku
-                        if dig_q != dns_q:
-                            failed.write('[different questions] ' + dns + '\n')
-                            err = True
-                            break
-                        else:
-                            err = False
-                            break
-                        
-                    if line == ';; QUESTION SECTION:':
-                        start_q = True
-                break # i kdyby to nic nenaslo z digu, stejne vyskoc
-                    
-            if line == 'QUESTION':
-                start_q = True
-                continue
+#                    if line == ';; QUESTION SECTION:':
+#                        start_q = True
+#                break # i kdyby to nic nenaslo z digu, stejne vyskoc
+#                    
+#            if line == 'QUESTION':
+#                start_q = True
+#                continue
             
-        if not err: # questions porovnany, pokracuj porovnanim answers
-            passed.write('[RC: 0] ' + dns + '\n')
+#        if not err: # questions porovnany, pokracuj porovnanim answers
+#            passed.write('[RC: 0] ' + dns + '\n')
 
-    # konec testovani uspesneho testu
-
-    else: # test mel skoncit neuspechem
-        passed.write('[RC: 1] ' + dns + '\n')        
-        
         # KONEC JEDNOHO TESTU
 
 failed.close() 

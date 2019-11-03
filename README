@@ -15,10 +15,14 @@
 ## soubory
 Makefile  
 README  
+manual.pdf  
 functions.h  
 functions.c  
 dnsresolver.c  
 tests.py  
-/tests/digs
+/tests/passed
 /tests/failed
-/tests/generated
+/tests/generated  
+
+## prerekvizity
+python3 pro spousteni testovani

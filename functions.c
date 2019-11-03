@@ -52,7 +52,7 @@ int validate_port(char *port) {
 // funkce inspirovana z: http://man7.org/linux/man-pages/man3/getaddrinfo.3.html?fbclid=IwAR1nM16wJIbbV9qvZ6yES__aYIfzpN63QYpDA53Ce6t425TGtsAxvzpeu60
 void validate_hostname(char *hostname, bool six_on) {
 
-	int sfd; // docket
+	int sfd; // socket
     struct addrinfo hints, *infoptr, *rp;
     memset(&hints, 0, sizeof(hints));
 
@@ -69,7 +69,7 @@ void validate_hostname(char *hostname, bool six_on) {
     int result = getaddrinfo(hostname, NULL, &hints, &infoptr); // ziskani seznamu ip adres
     if (result) {
         fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(result));
-        exit(1); // protoze jsme v main nic nealokovali, muzeme pouzit bez obav exit()
+        exit(1);
     }
 
 	bool f = false; // nalezena funkcni adresa
@@ -93,7 +93,7 @@ void validate_hostname(char *hostname, bool six_on) {
 
     if (!f) { // nebyly nalezeny zadne adresy k domenovemu jmenu
         fprintf(stderr, "Nelze navazat spojeni s hostname.\n");
-        exit(1);
+        exit(2);
     }
 
 	freeaddrinfo(infoptr); // uvolni systemove alokovany buffer
@@ -105,37 +105,43 @@ void validate_hostname(char *hostname, bool six_on) {
 // over jestli je hledana adresa validni retezec
 void validate_string(char *url) {
 
-	if(strlen(url) < 3 || strlen(url) > 255) // nevyhovuje delka adresy
+	char copy[256]; // kopie url adresy
+	memset(copy,'\0',256);
+	strcpy(copy, url);
+
+	if(!strlen(copy) || strlen(copy) > 255) // nevyhovuje delka adresy
 		goto fail;
 
-	if(url[strlen(url)-1] == '.') // pokud je posledni znak tecka, nech ji zmizet
-		url[strlen(url)-1] = '\0';
+	if(strlen(copy) == 1 && !strcmp(".",copy)) // pokud je to jen tecka, je to ok
+		return;
 
-	if(url[0] == '.' || url[0] == '-' || url[strlen(url)-1] == '-')
-		goto fail; // vyrad adresy ktere zacinaji nebo konci spatnym znakem
+	if((copy[0] == '.') || (copy[0] == '-'))
+		goto fail;
 
-	int label_c = 0; // pocet znaku jednoho labelu
-
-	for(int i = 0; i < strlen(url); i++) {
-		label_c++; // pridat znak do labelu
-
-		if(!isalnum(url[i]) && url[i] != '-' && url[i] != '.')
+	for(int i = 0; i < strlen(copy); i++) {
+		if(!isalnum(copy[i]) && copy[i] != '-' && copy[i] != '.')
 			goto fail; // vyrad adresy ktere obsahuji spatne znaky
-
-		if(url[i] == '.') {
-			label_c = 0; // preruseni labelu
-			if(url[i+1] == '.' || url[i+1] == '-')
-				goto fail; // po tecce nesmi nasledovat - ani .
-		}
-
-		else if(url[i] == '-') {
-			if(url[i+1] == '.')
-				goto fail; // po - nesmi byt .
-		}
-
-		if(label_c == 64)
-			goto fail; // label ma vice nez 63 znaku
 	}
+
+	char *bad = strstr(copy, ".-"); // vyrad spatne adresy
+	if(bad)
+		goto fail;
+	bad = strstr(copy,"-."); // vyrad dalsi spatne adresy
+	if(bad)
+		goto fail;
+	bad = strstr(copy,".."); // vyrad posledni spatne adresy
+	if(bad)
+		goto fail;
+
+    char *label = strtok(copy, "."); // naparsuj labely
+    while(label != NULL) { // prace na jednom labelu
+    	
+    	if(strlen(label) > 63) // label je delsi nez 63 znaku
+    		goto fail;
+    
+    	label = strtok(NULL, label); // skoc na dalsi label
+    }
+    
 	return;
 
 	fail:
@@ -207,7 +213,6 @@ void parser(unsigned char *result, unsigned char* pos, unsigned char* dgram, int
         result[i]='.'; // pridej tecku
         i++; // prejdi na dalsi label
     }
-    //result[i-1]='\0'; // smaz posledni tecku
 }
 
 // vytiskni odpovedi na vystup
@@ -228,6 +233,10 @@ int print_answers(int cnt, int *size, unsigned char *dgram, int *pos, unsigned c
 			position = (unsigned char *)&dgram[*size]; // nastav pozici za question blok	
 		
 			parser(content, position, dgram, pos); // uloz retezec Rname
+			
+			if(!strlen((const char *)content)) // nahrazeni teckou v pripade, ze se jedna o dotaz "."
+				strcpy((char * restrict)content,".");
+			
 			(*size) += (*pos); // pricti delku retezce Rname
 			RR *rr = (RR *)&dgram[*size]; // struktura odpovedi
 
@@ -320,7 +329,7 @@ int print_answers(int cnt, int *size, unsigned char *dgram, int *pos, unsigned c
 			else if(ntohs(rr->type) == 1) { // A zaznam
 				if(ntohs(rr->rdlen) != 4) { // delka neni 4
 					fprintf(stderr,"Chybna delka dat v odpovedi.\n");
-					return 1;
+					return 4;
 				}
 				memset(content, '\0', 256); // vynuluj buffer
 				memcpy(content, position, 4); // zkopiruj ip adresu do bufferu							
@@ -334,7 +343,7 @@ int print_answers(int cnt, int *size, unsigned char *dgram, int *pos, unsigned c
 			
 				if(ntohs(rr->rdlen) != 16) { // delka neni 16
 					fprintf(stderr,"Chybna delka dat v odpovedi.\n");
-					return 1;
+					return 4;
 				}
 			
 				memset(content, '\0', 256); // vynuluj buffer
