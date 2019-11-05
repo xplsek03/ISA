@@ -1,1 +1,0 @@
-gcc -Werror -Wall -Wpedantic dnsresolver.c functions.c functions.h -o dns
