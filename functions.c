@@ -191,7 +191,6 @@ void parser(unsigned char *result, unsigned char* pos, unsigned char* dgram, int
             result[c] = *pos;
 			c++;
  		}
- 		
         pos += 1; // posun se v retezci
  
         if(!off) { // nedoslo k vyskytu ukazatele
@@ -218,7 +217,9 @@ void parser(unsigned char *result, unsigned char* pos, unsigned char* dgram, int
 // vytiskni odpovedi na vystup
 // @ret 0 v poradku
 // @ret 1 chyba
-int print_answers(int cnt, int *size, unsigned char *dgram, int *pos, unsigned char *position, unsigned char *content, char *cl, char *tp) {
+int print_answers(int cnt, int *size, unsigned char *dgram, int *pos, unsigned char *position, unsigned char *content, char *cl, char *tp, char *typ) {
+
+	printf("%s (%i)\n",typ,cnt);
 
 	if(cnt) { // existuji nejake odpovedi
 
@@ -317,10 +318,10 @@ int print_answers(int cnt, int *size, unsigned char *dgram, int *pos, unsigned c
 			position = (unsigned char *)&dgram[*size]; // nastav pozici pred Rdata
 			
 			// VYPSANI ODPOVEDI
-			// kompletne podporovane: A / AAAA / NS / PTR / SOA / TXT
+			// kompletne podporovane: CNAME / A / AAAA / NS / PTR / SOA / TXT
 			// podpora vypisu hex dat: jakekoliv dalsi zaznamy
 			
-			if(ntohs(rr->type) == 2 || ntohs(rr->type) == 12 || ntohs(rr->type) == 6 || ntohs(rr->type) == 16) { // A / AAAA / NS / PTR / SOA / TXT
+			if(ntohs(rr->type) == 5 || ntohs(rr->type) == 2 || ntohs(rr->type) == 12 || ntohs(rr->type) == 6 || ntohs(rr->type) == 16) { // CNAME / A / AAAA / NS / PTR / SOA / TXT
 				parser(content, position, dgram, pos); // naparsuj Rdata
 				printf("%s",content);
 			}
@@ -413,71 +414,4 @@ bool revert_ip(char *ip) {
 		return true;	
 	}
 	return false;	
-}
-
-// najdi mezi odpovedmi CNAME zaznam
-// @ret true nalezen cname
-// @ret false cname nenalezen
-bool find_cname(int *size, unsigned char *dgram, int *pos, unsigned char *position, unsigned char *content, bool six_on, char *ip_val) {
-
-	HEADER *header = (HEADER *)&dgram[*size]; // struktura odpovedi
-
-	int answer = 0; // pocet odpovedi
-	(*size) += sizeof(HEADER); // skoc za hlavicku dns
-	position = (unsigned char *)&dgram[*size]; // nastav position pred question name
-	parser(content, position, dgram, pos); // naparsuj question name
-	(*size) += (*pos); // dostan se za question name
-	(*size) += sizeof(Q); // skoc za question data
-	position = (unsigned char *)&dgram[*size]; // nastav pozici za question blok		
-	
-	for(int i = 0; i < 2; i++) { // proved postupne pro odpovedi, autoritativni odpovedi a additional odpovedi
-		if(i == 0)
-			answer = ntohs(header->acount);
-		else if(i == 1)
-			answer = ntohs(header->aucount);
-		else
-			answer = ntohs(header->addcount);
-
-		// prace na jednom typu odpovedi
-	
-		if(answer) { // existuji nejake odpovedi
-
-			for(int i = 0; i < answer; i++) { // naparsuj postupne kazdou odpoved
-			
-				memset(content, '\0', 257);
-				parser(content, position, dgram, pos); // uloz retezec Rname				
-			
-				(*size) += (*pos); // pricti delku retezce Rname
-				RR *rr = (RR *)&dgram[*size]; // struktura odpovedi
-									
-				if(ntohs(rr->type) == 5) { // nalezen CNAME zaznam
-				
-					if(ntohs(rr->cl) == 1) { // CNAME zaznam, trida IN
-						(*size) += sizeof(RR); // skoc za strukturu
-						position = (unsigned char *)&dgram[*size]; // nastav pozici pred Rdata	
-						parser(content, position, dgram, pos); // naparsuj Rdata
-						(*size) += (*pos); // pricti delku retezce Rdata
-						
-						bool fakev6; // placeholder do funkce validate_ip, v6 uz je nastavene
-						
-						validate_string((char *)content); // over ze je to platne domenove jmeno
-						
-						if(!validate_ip((char *)content, &fakev6, six_on)) { // over jestli CNAME Rdata je domena a neni IP
-						
-							memset(ip_val, '\0', 257);
-							strcpy(ip_val, (const char * restrict)content); // do ip_val zapis hodnotu CNAME zaznamu
-							return true; // CNAME nalezen a je v poradku
-						}					
-					}
-				}
-				else { // nebyl to CNAME, pokracuj dalsi odpovedi
-					(*size) += sizeof(RR); // preskoc za Rdata
-					position = (unsigned char *)&dgram[*size]; // nastav pozici pred Rdata	
-					parser(content, position, dgram, pos); // naparsuj Rdata
-					(*size) += (*pos); // pricti delku retezce Rdata
-				}								
-			}	
-		}		
-	}
-	return false; // CNAME nebyl nalezen		
 }

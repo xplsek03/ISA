@@ -12,7 +12,6 @@
 #include <string.h>
 #include <sys/time.h>
 #include <netdb.h>
-#include <time.h>
 // freebsd
 #include <netinet/in.h>
 #include <ifaddrs.h>
@@ -37,18 +36,7 @@ int main (int argc, char **argv) {
 	strcpy(p_val_str,"53");	// uloz defaultni port
 	char ip_val[257]; // dotazovana adresa
 	memset(ip_val,'\0',257);
-	
-	// CNAME special
-	char q_origin[257]; // puvodni dotazovana adresa, pokud pouzivame nove CNAME hledani
-	memset(q_origin, '\0', 257);
-    srand(time(NULL)); // vygeneruj seed pro nahodne id hlavicky
-    bool cname_flag = true; // CNAME byl nalezen, bude se opakovat odesilani
-    bool cname_once = false; // CNAME byl nalezen alespon jednou
-
-	// buffery pro zapis odpovedi z datagramu kde byl CNAME zaznam. V pripade potreby realokovat o dalsich 512
-	char *buff_a = malloc(sizeof(char) * 512);
-	char *buff_aa = malloc(sizeof(char) * 512);
-	char *buff_au = malloc(sizeof(char) * 512);
+	int q_type = 0; // typ quesiton pri vytvareni dns requestu
 	
 	// getopt
 	int index;
@@ -130,7 +118,6 @@ int main (int argc, char **argv) {
 	}
 	else { // obycejny dotaz, muze byt dotazovan pouze validni retezec
 		validate_string(ip_val);
-		strcpy(q_origin, ip_val); // uloz puvodni question
 	}
 
 	p_val = validate_port(p_val_str); // over hodnotu portu
@@ -157,296 +144,257 @@ int main (int argc, char **argv) {
 
 	// ******** PLNENI DATAGRAMU *********
 
-	while(cname_flag) { // fikce, ze CNAME byl nalezen
+	int size = 0; // zarazka, aby nebylo potreba prepocitavat pozici v datagramu
+	unsigned char dgram[65536]; // datagram
+	HEADER *header = (HEADER *)&dgram; // hlavicka dns
+	header->id = (unsigned short)htons(getpid());
+	header->guts = htons(0); // abychom nemuseli pouzivat bitove pole, nastavime jednotlive bity
+	if(r_on) { // bit rekurze
+		header->guts ^= 1UL << 0; // nulty bit, LittEnd? POZN: xxxxxxx1  <-(1) xxxxxxxx <-(2)
+	}
 
-		int random = rand(); // id header
-		int size = 0; // zarazka, aby nebylo potreba prepocitavat pozici v datagramu
-		unsigned char dgram[65536]; // datagram
-		HEADER *header = (HEADER *)&dgram; // hlavicka dns
-		header->id = (unsigned short)htons(random);
-		header->guts = htons(0); // abychom nemuseli pouzivat bitove pole, nastavime jednotlive bity
-		if(r_on) { // bit rekurze
-			header->guts ^= 1UL << 0; // nulty bit, LittEnd? POZN: xxxxxxx1  <-(1) xxxxxxxx <-(2)
+	header->qcount = htons(1); // mame 1 pozadavek 
+	header->acount = htons(0);
+	header->aucount = htons(0);
+	header->addcount = htons(0);
+	
+	size = sizeof(HEADER); // preskoc hlavicku dns
+	
+	unsigned char *position = (unsigned char *)&dgram[size]; // aktualni pozice v dgramu, pouziva se ve fcich
+	
+	dns_format(position, ip_val); // preved adresu do dns formatu
+	
+	size += strlen((const char *)position) + 1; // skoc za question name
+
+	Q *q = (Q *)&dgram[size]; // question type + class
+	if(x_on) { // -x
+		q->type = htons(12); // PTR, reverzni lookup
+		q_type = 12;
+	}
+	else if(six_on) { // -6
+		q->type = htons(28); // AAAA
+		q_type = 28;
+	}
+	else { // defualtni A dotaz
+		q->type = htons(1); // A
+		q_type = 1;
+	}
+	
+	q->cl = htons(1); // IN
+
+	size += sizeof(Q); // skoc za question
+
+	// ******** ODESLANI DATAGRAMU *********
+
+	int s; // socket
+
+	if(v6) { // pouzij IPv6
+    	struct sockaddr_in6 dest; // server socket
+    	memset(&dest, 0, sizeof(dest));
+    	dest.sin6_family = AF_INET6;
+    	dest.sin6_port = htons(p_val); // port
+		inet_pton(AF_INET6, s_val, &(dest.sin6_addr)); // ipv6 addr
+		
+		s = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP); // otevri socket
+		if(s == -1) {
+			fprintf(stderr,"Nelze vytvorit socket.\n");
+			return 2;
 		}
-	
-		header->qcount = htons(1); // mame 1 pozadavek 
-		header->acount = htons(0);
-		header->aucount = htons(0);
-		header->addcount = htons(0);
-		
-		size = sizeof(HEADER); // preskoc hlavicku dns
-		
-		unsigned char *position = (unsigned char *)&dgram[size]; // aktualni pozice v dgramu, pouziva se ve fcich
-		
-		dns_format(position, ip_val); // preved adresu do dns formatu
-		
-		size += strlen((const char *)position) + 1; // skoc za question name
-	
-		Q *q = (Q *)&dgram[size]; // question type + class
-		if(x_on) { // -x
-			q->type = htons(12); // PTR, reverzni lookup
+		struct timeval timeout; // timeout socketu
+		timeout.tv_sec = 3; // nastav timeout na 3s, kdyby neprisla odpoved 
+		if (setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
+			perror("Setsockopt error: \n");
+			return 2;
 		}
-		else if(six_on) { // -6
-			q->type = htons(28); // AAAA
-		}
-		else { // defualtni A dotaz
-			q->type = htons(1); // A
-		}
-		
-		q->cl = htons(1); // IN
-	
-		size += sizeof(Q); // skoc za question
-	
-		// ******** ODESLANI DATAGRAMU *********
-	
-		int s; // socket
-	
-		if(v6) { // pouzij IPv6
-    		struct sockaddr_in6 dest; // server socket
-    		memset(&dest, 0, sizeof(dest));
-    		dest.sin6_family = AF_INET6;
-    		dest.sin6_port = htons(p_val); // port
-			inet_pton(AF_INET6, s_val, &(dest.sin6_addr)); // ipv6 addr
-			
-			s = socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP); // otevri socket
-			if(s == -1) {
-				fprintf(stderr,"Nelze vytvorit socket.\n");
-				return 2;
-			}
-			struct timeval timeout; // timeout socketu
-			timeout.tv_sec = 5; // nastav timeout na 5s, kdyby neprisla odpoved 
-			if (setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
-				perror("Setsockopt error: \n");
-				return 2;
-			}
-			
+
+		int incoming = sizeof(dest);
+		int try = 0; // pocet pokusu odeslani
+
+		while(try < 3) {		
 			if(sendto(s, dgram, size, 0, (struct sockaddr*)&dest, sizeof(dest)) < 0) { // odeslani datagramu
 				perror("Chyba pri odesilani dat: \n");
 				return 2;
-			}
-			int incoming = sizeof(dest);
-			
-			int try = 0; // pocet pokusu odeslani
-			while(try < 3) {
-				if(recvfrom(s,dgram, 65536 , 0, (struct sockaddr*)&dest, (socklen_t*)&incoming) < 0) // -1, zprava nedosla
-					try++;
-				else
-					break;
-			}
-			if(try == 2) {
-				perror("Chyba pri prijimani dat: \n");
-				return 2;
-			}
+			}	
+			if(recvfrom(s,dgram, 65536 , 0, (struct sockaddr*)&dest, (socklen_t*)&incoming) < 0) // -1, zprava nedosla
+				try++;
+			else
+				break;
 		}
-		else { // IPv4
-    		struct sockaddr_in dest; // server socket
-    		memset(&dest, 0, sizeof(dest));
-    		dest.sin_family = AF_INET;
-    		dest.sin_addr.s_addr = inet_addr(s_val); // ipv4 adresa
-    		dest.sin_port = htons(p_val); // port
-    		
-			s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP); // otevri socket
-			if(s == -1) {
-				fprintf(stderr,"Nelze vytvorit socket.\n");
-				return 2;
-			}
-			struct timeval timeout; // timeout socketu
-			timeout.tv_sec = 5; // nastav timeout na 5s, kdyby neprisla odpoved 
-			if (setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
-				perror("Setsockopt error: \n");
-				return 2;
-			}
-			
-			if(sendto(s, dgram, size, 0, (struct sockaddr*)&dest, sizeof(dest)) < 0) { // odeslani datagramu
-				perror("Chyba pri odesilani dat: \n");
-				return 2;
-			}
-			int incoming = sizeof(dest);
-	
-			int try = 0; // pocet pokusu odeslani
-			while(try < 3) {
-				if(recvfrom(s,dgram, 65536 , 0, (struct sockaddr*)&dest, (socklen_t*)&incoming) < 0) // -1, zprava nedosla
-					try++;
-				else
-					break;
-			}
-			if(try == 2) {
-				perror("Chyba pri prijimani dat: \n");
-				return 2;
-			}
+		if(try == 3) {
+			perror("Chyba pri prijimani dat: \n");
+			return 2;
 		}
+	}
+	else { // IPv4
+    	struct sockaddr_in dest; // server socket
+    	memset(&dest, 0, sizeof(dest));
+    	dest.sin_family = AF_INET;
+    	dest.sin_addr.s_addr = inet_addr(s_val); // ipv4 adresa
+    	dest.sin_port = htons(p_val); // port
     	
+		s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP); // otevri socket
+		if(s == -1) {
+			fprintf(stderr,"Nelze vytvorit socket.\n");
+			return 2;
+		}
+		struct timeval timeout; // timeout socketu
+		timeout.tv_sec = 3; // nastav timeout na 3s, kdyby neprisla odpoved 
+		if (setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout)) < 0) {
+			perror("Setsockopt error: \n");
+			return 2;
+		}
+
+		int incoming = sizeof(dest);
+		int try = 0; // pocet pokusu odeslani
+		while(try < 3) {		
+			if(sendto(s, dgram, size, 0, (struct sockaddr*)&dest, sizeof(dest)) < 0) { // odeslani datagramu
+				perror("Chyba pri odesilani dat: \n");
+				return 2;
+			}
+	
+			if(recvfrom(s,dgram, 65536 , 0, (struct sockaddr*)&dest, (socklen_t*)&incoming) < 0) // -1, zprava nedosla
+				try++;
+			else
+				break;
+		}
+		if(try == 3) {
+			perror("Chyba pri prijimani dat: \n");
+			return 2;
+		}
+	}
+    
+	
+    // ******** ZPRACOVANI ODPOVEDI *********
+
+	header = (HEADER *)&dgram; // dns hlavicka
+
+	if(header->id == htons(getpid()) && ((htons(header->guts) >> 15) & 1U)) { // id dotazu odpovida id odpovedi a je to odpoved
+
+		if(r_on && !((htons(header->guts) >> 15) & 1U)) { // pokud chceme rekurzi a neni dostupna, vyhod chybu
+			fprintf(stderr,"Rekurze neni na tomto serveru dostupna.\n");
+			return 3;
+		}
 		
-    	// ******** ZPRACOVANI ODPOVEDI *********
-	
-		header = (HEADER *)&dgram; // dns hlavicka
-	
-		if(header->id == htons(random) && ((htons(header->guts) >> 15) & 1U)) { // id dotazu odpovida id odpovedi a je to odpoved
-	
-			if(r_on && !((htons(header->guts) >> 15) & 1U)) { // pokud chceme rekurzi a neni dostupna, vyhod chybu
-				fprintf(stderr,"Rekurze neni na tomto serveru dostupna.\n");
+		if(((htons(header->guts) >> 0) & 1U) || ((htons(header->guts) >> 1) & 1U) 
+		|| ((htons(header->guts) >> 2) & 1U) || ((htons(header->guts) >> 3) & 1U)) { // pokud se vyskytla nektera z chyb opcode
+		
+			if(((htons(header->guts) >> 0) & 1U) && !((htons(header->guts) >> 1) & 1U) 
+			&& !((htons(header->guts) >> 2) & 1U) && !((htons(header->guts) >> 3) & 1U)) {
+				fprintf(stderr,"Server nedokaze vyhodnotit pozadavek.\n");
 				return 3;
 			}
+			else if(!((htons(header->guts) >> 0) & 1U) && ((htons(header->guts) >> 1) & 1U) 
+			&& !((htons(header->guts) >> 2) & 1U) && !((htons(header->guts) >> 3) & 1U)) {
+				fprintf(stderr,"Server se nemuze pripojit k nameserveru.\n");
+				return 3;
+			}
+
+			else if(((htons(header->guts) >> 0) & 1U) && ((htons(header->guts) >> 1) & 1U) 
+			&& !((htons(header->guts) >> 2) & 1U) && !((htons(header->guts) >> 3) & 1U)) {
+				fprintf(stderr,"Domenove jmeno neexistuje.\n");
+				return 3;
+			}				
+
+			else if(!((htons(header->guts) >> 0) & 1U) && !((htons(header->guts) >> 1) & 1U) 
+			&& ((htons(header->guts) >> 2) & 1U) && !((htons(header->guts) >> 3) & 1U)) {
+				fprintf(stderr,"Server tento typ pozadavku neimplementuje.\n");
+				return 3;
+			}	
+
+			else if(((htons(header->guts) >> 0) & 1U) && !((htons(header->guts) >> 1) & 1U) 
+			&& ((htons(header->guts) >> 2) & 1U) && !((htons(header->guts) >> 3) & 1U)) {
+				fprintf(stderr,"Server pozadavek zamitnul.\n");
+				return 3;
+			}	
+			else { // jiny chybovy kod nez 1-5
+				fprintf(stderr,"Neznama chyba.\n");
+				return 3;
+			}
+		}
+
+		printf("AUTORITATIVNI\t%s\n", ((htons(header->guts) >> 10) & 1U) ? "ano" : "ne"); // AA bit set
+		printf("ZKRACENO\t%s\n", ((htons(header->guts) >> 9) & 1U) ? "ano" : "ne"); // TC bit set
+		printf("REKURZE \t%s\n", (((htons(header->guts) >> 7) & 1U) && ((htons(header->guts) >> 8) & 1U)) ? "ano" : "ne");
+		// rekurzivni pouze v pripade, ze byla pozadovana rekurze a zaroven je nastavena rekurze dostupna na serveru
+	
+		printf("\n");
+		
+		if(ntohs(header->qcount) == 1) { // ptali jsme se na jedinou otazku
 			
-			if(((htons(header->guts) >> 0) & 1U) || ((htons(header->guts) >> 1) & 1U) 
-			|| ((htons(header->guts) >> 2) & 1U) || ((htons(header->guts) >> 3) & 1U)) { // pokud se vyskytla nektera z chyb opcode
+			size = sizeof(HEADER); // parsovani zacina za hlavickou
+			position = (unsigned char *)&dgram[size]; // ukazatel na zacatek question retezce
+		
+			unsigned char content[257]; // buffer pro vysledek parsovani
+			memset(content,'\0',257);
 			
-				if(((htons(header->guts) >> 0) & 1U) && !((htons(header->guts) >> 1) & 1U) 
-				&& !((htons(header->guts) >> 2) & 1U) && !((htons(header->guts) >> 3) & 1U)) {
-					fprintf(stderr,"Server nedokaze vyhodnotit pozadavek.\n");
-					return 3;
-				}
-				else if(!((htons(header->guts) >> 0) & 1U) && ((htons(header->guts) >> 1) & 1U) 
-				&& !((htons(header->guts) >> 2) & 1U) && !((htons(header->guts) >> 3) & 1U)) {
-					fprintf(stderr,"Nelze se pripojit k serveru.\n");
-					return 3;
-				}
-	
-				else if(((htons(header->guts) >> 0) & 1U) && ((htons(header->guts) >> 1) & 1U) 
-				&& !((htons(header->guts) >> 2) & 1U) && !((htons(header->guts) >> 3) & 1U)) {
-					fprintf(stderr,"Domenove jmeno neexistuje.\n");
-					return 3;
-				}				
-	
-				else if(!((htons(header->guts) >> 0) & 1U) && !((htons(header->guts) >> 1) & 1U) 
-				&& ((htons(header->guts) >> 2) & 1U) && !((htons(header->guts) >> 3) & 1U)) {
-					fprintf(stderr,"Server tento typ pozadavku neimplementuje.\n");
-					return 3;
-				}	
-	
-				else if(((htons(header->guts) >> 0) & 1U) && !((htons(header->guts) >> 1) & 1U) 
-				&& ((htons(header->guts) >> 2) & 1U) && !((htons(header->guts) >> 3) & 1U)) {
-					fprintf(stderr,"Server pozadavek zamitnul.\n");
-					return 3;
-				}	
-				else { // jiny chybovy kod nez 1-5
-					fprintf(stderr,"Neznama chyba.\n");
-					return 3;
-				}
+			int pos = 0; // zarazka, kde skoncilo parsovani, uklada se do nej delka retezcu
+							
+			parser(content, position, dgram, &pos); // naparsuj question name
+			
+			size += pos; // dostan se za question name
+			
+			q = (Q *)&dgram[size]; // naparsovani quesiton class a question type
+			
+			// promenne k parsovani odpovedi
+			char tp[6];
+			memset(tp,'\0',6);
+			char cl[3];
+			memset(cl,'\0',3);
+			
+			// trida
+			if(ntohs(q->cl) == 1) {
+				strcpy(cl,"IN");
+			}
+			else {
+				fprintf(stderr,"Nepodporovana trida question.\n");
+				return 4;
 			}
 			
-			if(ntohs(header->qcount) == 1) { // ptali jsme se na jedinou otazku
-	
-				unsigned char content[257]; // buffer pro vysledek parsovani
-				memset(content,'\0',257);
-				int pos = 0; // zarazka parsovani			
-				size = sizeof(HEADER); // parsovani zacina za hlavickou
-				position = (unsigned char *)&dgram[size]; // ukazatel na zacatek question retezce
-								
-				parser(content, position, dgram, &pos); // naparsuj question name
-				
-				size += pos; // dostan se za question name
-				q = (Q *)&dgram[size]; // naparsovani question class a question type
-				
-				// promenne k parsovani odpovedi
-				char tp[6];
-				memset(tp,'\0',6);
-				char cl[3];
-				memset(cl,'\0',3);
-				
-				// trida
-				if(ntohs(q->cl) == 1) {
-					strcpy(cl,"IN");
-				}
-				else if(ntohs(q->cl) == 3) {
-					strcpy(cl,"CH");
-				}
-				else if(ntohs(q->cl) == 4) {
-					strcpy(cl,"HS");
-				}
-				else {
-					fprintf(stderr,"Nepodporovana trida question.\n");
-					return 4;
-				}
-				
-				// typ
-				if(ntohs(q->type) == 1) {
-					strcpy(tp,"A");
-				}
-				else if(ntohs(q->type) == 12) {
-					strcpy(tp,"PTR");
-				}				
-				else if(ntohs(q->type) == 28) {
-					strcpy(tp,"AAAA");
-				}
-				else {
-					fprintf(stderr,"Nepodporovany typ question: %i.\n",ntohs(q->type));
-					return 4;
-				}							
-				
-				// ********* HLEDANI CNAME ***********
-				memset(content,'\0',257);
-				pos = 0; // zarazka parsovani
-				size = 0;
-				
-				if(find_cname(&size, dgram, &pos, position, content, six_on, ip_val)) { // CNAME JE NALEZEN A VALIDNI, ZOPAKUJ SKRIPT
-					cname_flag = true;
-					cname_once = true;
-				}
-				else { // CNAME nenalezeno, normalne tiskni
-				
-					cname_flag = false; // vypni opakovane odesilani kvuli CNAME	
-				
-					printf("AUTORITATIVNI\t%s\n", ((htons(header->guts) >> 10) & 1U) ? "ano" : "ne"); // AA bit set
-					printf("ZKRACENO\t%s\n", ((htons(header->guts) >> 9) & 1U) ? "ano" : "ne"); // TC bit set
-					printf("REKURZE \t%s\n", (((htons(header->guts) >> 7) & 1U) && ((htons(header->guts) >> 8) & 1U)) ? "ano" : "ne");
-					// rekurzivni pouze v pripade, ze byla pozadovana rekurze a zaroven je nastavena rekurze dostupna na serveru
-					
-					size = sizeof(HEADER); // parsovani zacina za hlavickou
-					position = (unsigned char *)&dgram[size]; // ukazatel na zacatek question retezce
-					memset(content,'\0',257);
-					pos = 0; // zarazka, kde skoncilo parsovani, uklada se do nej delka retezcu
+			if(ntohs(q->type) != q_type) { // neni stejny typ jako typ zadany pri vytvareni
+				fprintf(stderr,"Nepodporovany typ question: %i.\n",ntohs(q->type));
+				return 4;				
+			}
+			
+			// typ
+			if(ntohs(q->type) == 1) {
+				strcpy(tp,"A");
+			}
+			else if(ntohs(q->type) == 12) {
+				strcpy(tp,"PTR");
+			}				
+			else {
+				strcpy(tp,"AAAA");
+			}
+			//else {
+			//	fprintf(stderr,"Nepodporovany typ question: %i.\n",ntohs(q->type));
+			//	return 4;
+			//}							
+			
+			if(!strlen((const char *)content)) // nahrazeni teckou v pripade, ze se jedna o dotaz "." - aby se neco vypsalo v Question sekci
+				strcpy((char * restrict)content,".");
+			
+			printf("QUESTION\n%s\t%s\t%s\n", content, cl, tp);
+			printf("\n");
 							
-					parser(content, position, dgram, &pos); // naparsuj question name
-					size += pos; // dostan se za question name					
+			size += sizeof(Q); // preskoc question blok
+			
+			if(print_answers(ntohs(header->acount), &size, dgram, &pos, position, content, cl, tp, "ANSWERS"))
+				return 4; // neco bylo spatne naformatovane		
 
-					if(!strlen((const char *)q_origin)) // nahrazeni teckou v pripade, ze se jedna o dotaz "." - aby se neco vypsalo v quest.
-						strcpy((char * restrict)q_origin,".");
-					else if(q_origin[strlen((const char *)q_origin)-1] != '.') // pokud neni na konci dotazu '.', pridej
-						strcat(q_origin, ".");						
-					
-					printf("\n");
-					if(cname_once) // byl nalezen alespon jeden CNAME
-						printf("QUESTION\n%s\t%s\t%s\t=> %s\n", q_origin, cl, tp, content);
-					else // bez CNAME zaznamu
-						printf("QUESTION\n%s\t%s\t%s\t\n", q_origin, cl, tp);
-					printf("\n");
-									
-					size += sizeof(Q); // preskoc question blok
-					
-				
-					printf("ANSWERS (%i)\n", ntohs(header->acount));
-					printf("%s",buff_a); // buffer odpovedi nagenerovany z predchozich CNAME zaznamu
-					if(print_answers(ntohs(header->acount), &size, dgram, &pos, position, content, cl, tp)) {
-						free(buff_a);free(buff_au);free(buff_add); // uvolni buffery
-						return 4; // neco bylo spatne naformatovane		
-					}
-					
-					printf("AUTHORITATIVE ANSWERS (%i)\n", ntohs(header->aucount));
-					printf("%s",buff_aa); // buffer odpovedi nagenerovany z predchozich CNAME zaznamu
-					if(print_answers(ntohs(header->aucount), &size, dgram, &pos, position, content, cl, tp))
-						return 4; // neco bylo spatne naformatovane
+			if(print_answers(ntohs(header->aucount), &size, dgram, &pos, position, content, cl, tp, "AUTHORITATIVE ANSWERS"))
+				return 4; // neco bylo spatne naformatovane
+
+			if(print_answers(ntohs(header->addcount), &size, dgram, &pos, position, content, cl, tp, "ADDITIONAL ANSWERS"))
+				return 4; // neco bylo spatne naformatovane					
+		}
 		
-					printf("ADDITIONAL ANSWERS (%i)\n", ntohs(header->addcount));
-					printf("%s",buff_au); // buffer odpovedi nagenerovany z predchozich CNAME zaznamu
-					if(print_answers(ntohs(header->addcount), &size, dgram, &pos, position, content, cl, tp))
-						return 4; // neco bylo spatne naformatovane	
-						
-				}				
-			}	
-			else { // pokud neobsahuje question nebo jich obsahuje vic
-				fprintf(stderr,"Datagram neobsahuje dotaz nebo je vic nez 1.\n");
-				return 4;
-			}     	
-    	}
-    	
+		
+			
+		else { // pokud neobsahuje question nebo jich obsahuje vic
+			fprintf(stderr,"Datagram neobsahuje dotaz nebo je vic nez 1.\n");
+			return 4;
+		}     	
     }
      
-    // uvolni CNAME buffery
-    free(buff_a);
-    free(buff_aa);
-    free(buff_au);
-     
-	return 0;
-		
+	return 0;	
 }
