@@ -3,7 +3,8 @@
 ## spusteni
 '''
 ./dns --help  
-./dns [-x] [-r] [-6] -s dnsserver [-p port] adresa|url
+./dns [-x] [-r] [-6] -s dnsserver [-p port] adresa|url  
+python3 tests.py
 '''
 -x: rDNS  
 -6: AAAA dotaz  

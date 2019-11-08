@@ -52,7 +52,6 @@ int validate_port(char *port) {
 // funkce inspirovana z: http://man7.org/linux/man-pages/man3/getaddrinfo.3.html?fbclid=IwAR1nM16wJIbbV9qvZ6yES__aYIfzpN63QYpDA53Ce6t425TGtsAxvzpeu60
 void validate_hostname(char *hostname, bool six_on) {
 
-	int sfd; // socket
     struct addrinfo hints, *infoptr, *rp;
     memset(&hints, 0, sizeof(hints));
 
@@ -63,12 +62,12 @@ void validate_hostname(char *hostname, bool six_on) {
     	hints.ai_family = AF_INET;
     }
     hints.ai_socktype = SOCK_DGRAM;
-    hints.ai_flags = 0;
+    hints.ai_flags =  0;
     hints.ai_protocol = 0;
 
     int result = getaddrinfo(hostname, NULL, &hints, &infoptr); // ziskani seznamu ip adres
     if (result) {
-        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(result));
+        fprintf(stderr, "getaddrinfo: %s (%i)\n", gai_strerror(result),result);
         exit(1);
     }
 
@@ -76,28 +75,22 @@ void validate_hostname(char *hostname, bool six_on) {
 	char ip[257]; // buffer pro ip adresu
 	memset(ip, '\0', 257);
 
-    for (rp = infoptr; rp != NULL; rp = rp->ai_next) { // overuj adresy, dokud se nedostanes k funkcni
-
-        sfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol); // socket pro overeni funkcnosti adresy
-        if (sfd == -1)
-            continue;
-			
-        if (connect(sfd, rp->ai_addr, rp->ai_addrlen) != -1) { // podarilo se navazat spojeni s jednou z adres
-            getnameinfo(rp->ai_addr, rp->ai_addrlen, ip, sizeof(ip), NULL, 0, NI_NUMERICHOST); // uloz adresu do bufferu
+	// DODELAT ITEROVANI PRES ADRESY, NENI HOTOVE. NA MERLINOVI TO Z NEJAKEHO DUVODU BLBNULO, NEMOHL SE PRES CONNECT() SPOJIT S ZADNOU ADRESOU
+    for (rp = infoptr; rp != NULL; rp = rp->ai_next) { // overuj adresy, dokud se nedostanes k funkcni		
+		if(rp->ai_family != hints.ai_family) { // nalezena IP neni spravne tridy
+			continue;
+		}
+		else {
+			getnameinfo(rp->ai_addr, rp->ai_addrlen, ip, sizeof(ip), NULL, 0, NI_NUMERICHOST); // uloz adresu do bufferu
             f = true; // adresa nalezena
-            close(sfd); // zavri socket
 			break;
-        }
-		close(sfd); // zavri socket
+		}
     }
-
     if (!f) { // nebyly nalezeny zadne adresy k domenovemu jmenu
-        fprintf(stderr, "Nelze navazat spojeni s hostname.\n");
+        fprintf(stderr, "Nebyly nalezeny IP adresy k zadanemu domenovemu jmenu.\n");
         exit(2);
     }
-
 	freeaddrinfo(infoptr); // uvolni systemove alokovany buffer
-	
 	memset(hostname,'\0',257);
     strcpy(hostname,ip); // prepis hostname na ip adresu
 }

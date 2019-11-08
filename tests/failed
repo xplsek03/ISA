@@ -1,19 +1,48 @@
-0
-0
-0
-0
-0
-0
-0
-0
-0
-./dns -s 8.8.8.8 147.229.8.12		RC: 0		EXPECTED: 1+0
-0
-0
-0
-0
-0
-0
-0
-0
-0
+[ipv6] ./dns -6 -x -s kazi.fit.vutbr.cz 2606:4700:4700::1111		RC: 1		EXPECTED: 0
+[ipv6] ./dns -6 -x -p 53 -s kazi.fit.vutbr.cz 2606:4700:4700::1111		RC: 1		EXPECTED: 0
+[ipv6] ./dns -6 -x -s 2606:4700:4700::1111 2606:4700:4700::1111		RC: 2		EXPECTED: 0
+[ipv6] ./dns -6 -x -p 53 -s 2606:4700:4700::1111 2606:4700:4700::1111		RC: 2		EXPECTED: 0
+[ipv6] ./dns -6 -x -s 8.8.8.8 2606:4700:4700::1111		RC: 1		EXPECTED: 0
+[ipv6] ./dns -6 -x -p 53 -s 8.8.8.8 2606:4700:4700::1111		RC: 1		EXPECTED: 0
+[ipv6] ./dns -6 -x -s kazi.fit.vutbr.cz 8.8.8.8		RC: 1		EXPECTED: 0
+[ipv6] ./dns -6 -x -p 53 -s kazi.fit.vutbr.cz 8.8.8.8		RC: 1		EXPECTED: 0
+[ipv6] ./dns -6 -x -s 2606:4700:4700::1111 8.8.8.8		RC: 2		EXPECTED: 0
+[ipv6] ./dns -6 -x -p 53 -s 2606:4700:4700::1111 8.8.8.8		RC: 2		EXPECTED: 0
+[ipv6] ./dns -6 -x -s 8.8.8.8 8.8.8.8		RC: 1		EXPECTED: 0
+[ipv6] ./dns -6 -x -p 53 -s 147.229.8.12 147.229.8.12		RC: 1		EXPECTED: 0
+[ipv6] ./dns -x -s 2606:4700:4700::1111 2606:4700:4700::1111		RC: 1		EXPECTED: 0
+[ipv6] ./dns -x -p 53 -s 2606:4700:4700::1111 2606:4700:4700::1111		RC: 1		EXPECTED: 0
+[ipv6] ./dns -x -s 2606:4700:4700::1111 147.229.8.12		RC: 1		EXPECTED: 0
+[ipv6] ./dns -x -p 53 -s 2606:4700:4700::1111 8.8.8.8		RC: 1		EXPECTED: 0
+[ipv6] ./dns -6 -x -r -s kazi.fit.vutbr.cz 2606:4700:4700::1111		RC: 1		EXPECTED: 0
+[ipv6] ./dns -6 -x -p 53 -r -s kazi.fit.vutbr.cz 2606:4700:4700::1111		RC: 1		EXPECTED: 0
+[ipv6] ./dns -6 -x -r -s 2606:4700:4700::1111 2606:4700:4700::1111		RC: 2		EXPECTED: 0
+[ipv6] ./dns -6 -x -p 53 -r -s 2606:4700:4700::1111 2606:4700:4700::1111		RC: 2		EXPECTED: 0
+[ipv6] ./dns -6 -x -r -s 8.8.8.8 2606:4700:4700::1111		RC: 1		EXPECTED: 0
+[ipv6] ./dns -6 -x -p 53 -r -s 147.229.8.12 2606:4700:4700::1111		RC: 1		EXPECTED: 0
+[ipv6] ./dns -6 -x -r -s kazi.fit.vutbr.cz 147.229.8.12		RC: 1		EXPECTED: 0
+[ipv6] ./dns -6 -x -p 53 -r -s kazi.fit.vutbr.cz 8.8.8.8		RC: 1		EXPECTED: 0
+[ipv6] ./dns -6 -x -r -s 2606:4700:4700::1111 147.229.8.12		RC: 2		EXPECTED: 0
+[ipv6] ./dns -6 -x -p 53 -r -s 2606:4700:4700::1111 147.229.8.12		RC: 2		EXPECTED: 0
+[ipv6] ./dns -6 -x -r -s 147.229.8.12 8.8.8.8		RC: 1		EXPECTED: 0
+[ipv6] ./dns -6 -x -p 53 -r -s 8.8.8.8 147.229.8.12		RC: 1		EXPECTED: 0
+[ipv6] ./dns -x -r -s 2606:4700:4700::1111 2606:4700:4700::1111		RC: 1		EXPECTED: 0
+[ipv6] ./dns -x -p 53 -r -s 2606:4700:4700::1111 2606:4700:4700::1111		RC: 1		EXPECTED: 0
+[ipv6] ./dns -x -r -s 2606:4700:4700::1111 147.229.8.12		RC: 1		EXPECTED: 0
+[ipv6] ./dns -x -p 53 -r -s 2606:4700:4700::1111 147.229.8.12		RC: 1		EXPECTED: 0
+[ipv6] ./dns -6 -s kazi.fit.vutbr.cz kazi.fit.vutbr.cz		RC: 1		EXPECTED: 0
+[ipv6] ./dns -6 -p 53 -s kazi.fit.vutbr.cz kazi.fit.vutbr.cz		RC: 1		EXPECTED: 0
+[ipv6] ./dns -6 -s 2606:4700:4700::1111 kazi.fit.vutbr.cz		RC: 2		EXPECTED: 0
+[ipv6] ./dns -6 -p 53 -s 2606:4700:4700::1111 kazi.fit.vutbr.cz		RC: 2		EXPECTED: 0
+[ipv6] ./dns -6 -s 8.8.8.8 kazi.fit.vutbr.cz		RC: 1		EXPECTED: 0
+[ipv6] ./dns -6 -p 53 -s 147.229.8.12 kazi.fit.vutbr.cz		RC: 1		EXPECTED: 0
+[ipv6] ./dns -s 2606:4700:4700::1111 kazi.fit.vutbr.cz		RC: 1		EXPECTED: 0
+[ipv6] ./dns -p 53 -s 2606:4700:4700::1111 kazi.fit.vutbr.cz		RC: 1		EXPECTED: 0
+[ipv6] ./dns -6 -r -s kazi.fit.vutbr.cz kazi.fit.vutbr.cz		RC: 1		EXPECTED: 0
+[ipv6] ./dns -6 -p 53 -r -s kazi.fit.vutbr.cz kazi.fit.vutbr.cz		RC: 1		EXPECTED: 0
+[ipv6] ./dns -6 -r -s 2606:4700:4700::1111 kazi.fit.vutbr.cz		RC: 2		EXPECTED: 0
+[ipv6] ./dns -6 -p 53 -r -s 2606:4700:4700::1111 kazi.fit.vutbr.cz		RC: 2		EXPECTED: 0
+[ipv6] ./dns -6 -r -s 8.8.8.8 kazi.fit.vutbr.cz		RC: 1		EXPECTED: 0
+[ipv6] ./dns -6 -p 53 -r -s 147.229.8.12 kazi.fit.vutbr.cz		RC: 1		EXPECTED: 0
+[ipv6] ./dns -r -s 2606:4700:4700::1111 kazi.fit.vutbr.cz		RC: 1		EXPECTED: 0
+[ipv6] ./dns -p 53 -r -s 2606:4700:4700::1111 kazi.fit.vutbr.cz		RC: 1		EXPECTED: 0
